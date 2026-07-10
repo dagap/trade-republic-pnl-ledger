@@ -1,0 +1,28 @@
+[project]
+name = "pnl-ledger"
+version = "0.1.0"
+description = "Generate a self-contained P&L calendar dashboard from Trade Republic transaction CSVs."
+readme = "README.md"
+requires-python = ">=3.9"
+# build.py uses only the Python standard library — no runtime dependencies.
+dependencies = []
+
+[dependency-groups]
+# Dev tooling: `uv run ruff check .` and `uv run pytest`
+dev = [
+    "ruff>=0.6",
+    "pytest>=8",
+]
+
+[tool.uv]
+# This is a script-style project, not an installable package.
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.pytest.ini_options]
+# The modules live at the repo root, so put it on the path for the tests.
+pythonpath = ["."]
+testpaths = ["tests"]

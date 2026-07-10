@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.pytest_cache/
+
+# Generated output
+dashboard.html
+
+# Local editor/agent tooling (kept out of the published repo)
+.claude/
+
+# Real trading data — never commit personal account exports.
+# The bundled sample (data/demo.csv) is the only CSV that should be tracked.
+data/*.csv
+!data/demo.csv

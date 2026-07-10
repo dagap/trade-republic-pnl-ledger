@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P&L Ledger</title>
+<style>
+  /*__STYLES__*/
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <h1>P&amp;L Ledger</h1>
+      <p id="brand-sub">Loading…</p>
+    </div>
+    <button class="theme-toggle" id="themeBtn" aria-label="Toggle theme">
+      <span id="themeIcon">◑</span><span id="themeLbl">Theme</span>
+    </button>
+  </header>
+
+  <section class="stats" id="stats"></section>
+
+  <section class="controls">
+    <div class="grp"><label for="start">Start</label><input type="date" id="start"></div>
+    <div class="grp"><label for="end">End</label><input type="date" id="end"></div>
+    <div class="presets" id="presets">
+      <button class="preset" data-preset="7">7D</button>
+      <button class="preset" data-preset="30">30D</button>
+      <button class="preset" data-preset="90">90D</button>
+      <button class="preset" data-preset="mtd">MTD</button>
+      <button class="preset" data-preset="ytd">YTD</button>
+      <button class="preset" data-preset="all">All</button>
+    </div>
+  </section>
+
+  <section class="summary" id="summary"></section>
+
+  <section class="chart-wrap collapsible" data-collapse="equity">
+    <div class="chart-head collapse-toggle">
+      <span class="c-title">Equity curve · <b>cumulative P&amp;L</b></span>
+      <span class="c-right">
+        <span class="c-dd" id="eq-dd"></span>
+        <span class="c-val" id="eq-end"></span>
+        <span class="chevron">▾</span>
+      </span>
+    </div>
+    <div class="chart-body collapse-body" id="eq"></div>
+  </section>
+
+  <section class="analytics">
+    <div class="panel collapsible" data-collapse="profile">
+      <div class="panel-head collapse-toggle"><h3>Win / loss profile</h3><span class="chevron">▾</span></div>
+      <div class="panel-body collapse-body" id="profile"></div>
+    </div>
+    <div class="panel collapsible" data-collapse="weekday">
+      <div class="panel-head collapse-toggle"><h3>Performance by weekday</h3><span class="chevron">▾</span></div>
+      <div class="panel-body collapse-body">
+        <div class="p-sub">Average P&amp;L per trading day · win rate below each bar</div>
+        <div id="dow"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="chart-wrap collapsible" data-collapse="rolling">
+    <div class="chart-head collapse-toggle">
+      <span class="c-title">Rolling payoff ratio · <b>trailing 10 trading days</b></span>
+      <span class="c-right">
+        <span class="c-dd" id="roll-be"></span>
+        <span class="c-val" id="roll-now"></span>
+        <span class="chevron">▾</span>
+      </span>
+    </div>
+    <div class="chart-body collapse-body" id="roll"></div>
+  </section>
+
+  <section class="cal-wrap">
+    <div class="cal-scroll" id="cal"></div>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<div id="eq-tip"><div class="d"></div><div class="v"></div></div>
+
+<div id="tip">
+  <div class="t-date"></div>
+  <div class="t-net"></div>
+  <div class="t-row"><span>Realized</span><span data-k="r"></span></div>
+  <div class="t-row"><span>Interest</span><span data-k="i"></span></div>
+  <div class="t-row"><span>Fees</span><span data-k="f"></span></div>
+  <div class="t-row"><span>Tax / refund</span><span data-k="t"></span></div>
+  <div class="t-row"><span>Trades</span><span data-k="n"></span></div>
+</div>
+
+<script>
+/*__APP__*/
+</script>
+</body>
+</html>
