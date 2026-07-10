@@ -64,13 +64,29 @@ anything real.
 
 ## Using your own data
 
-Drop one or more transaction CSVs into `data/` and rebuild. Multiple files are
-merged and de-duplicated by `transaction_id`, so you can just keep dropping in
-new exports. As soon as a real export is present, the bundled `demo.csv` steps
-aside automatically.
+### Exporting from Trade Republic
 
-Expected columns (Trade Republic's export): `date`, `type`, `symbol`, `shares`,
-`amount`, `fee`, `tax`, plus a `transaction_id`. `type` drives everything —
+Trade Republic can hand you a CSV that's meant for exactly this kind of tool. In
+the app, open **Profile → Statements & transaction export**, choose the
+transaction export, and pick the **"CSV export for tracking tools"** option
+(not the PDF statement or the tax-tool export — those don't carry the right
+columns). Choose your date range and export. That file is what this project
+reads.
+
+### Loading it
+
+Drop one or more of those CSVs into `data/` and rebuild. Multiple files are
+merged and de-duplicated by `transaction_id`, so you can keep dropping in fresh
+exports over time without worrying about overlap. As soon as a real export is
+present, the bundled `demo.csv` steps aside automatically.
+
+```sh
+cp ~/Downloads/transactions.csv data/
+uv run python build.py
+```
+
+The columns that matter are `date`, `type`, `symbol`, `shares`, `amount`, `fee`,
+`tax`, and `transaction_id`. `type` drives everything —
 `BUY` / `SELL` / `DIVIDEND` / `INTEREST_PAYMENT` / `TAX_OPTIMIZATION` /
 `TRANSFER_INSTANT_INBOUND` / `TRANSFER_INSTANT_OUTBOUND`.
 
