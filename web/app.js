@@ -141,6 +141,7 @@ function renderCalendar(s,e){
     const lead=mondayIdx(y,m,1);
     const dim=daysInMonth(y,m);
     let col=0, wkSum=0, wkHas=false;
+    const colSum=Array(7).fill(0), colHas=Array(7).fill(false);   // per-weekday column totals (bottom margin)
     const flushWeek=()=>{
       html+=`<div class="wcell"><div class="wk-l">Week</div>`+
         (wkHas?`<div class="wk-a ${cls(wkSum)}">${eurCompact(wkSum)}</div>`
@@ -172,11 +173,22 @@ function renderCalendar(s,e){
       } else {
         html+=`<div class="cell empty${wk}${isToday}"><div class="daynum">${day}</div></div>`;
       }
-      if(inRange && rec){ wkSum+=rec.p; wkHas=true; }
+      if(inRange && rec){ wkSum+=rec.p; wkHas=true;
+        const ci=mondayIdx(y,m,day); colSum[ci]+=rec.p; colHas[ci]=true; }
       col++;
       if(col===7){ flushWeek(); col=0; }
     }
     if(col>0){ while(col<7){ html+=`<div class="cell blank"></div>`; col++; } flushWeek(); }
+    // bottom margin: per-weekday column totals + corner grand total (reconciles to month net)
+    for(let ci=0;ci<7;ci++){
+      const wknd=[5,6].includes(ci);
+      html+=`<div class="dcell${wknd?" weekend":""}"><div class="dc-l">${WD[ci]}</div>`+
+        (colHas[ci]?`<div class="dc-a ${cls(colSum[ci])}">${eurCompact(colSum[ci])}</div>`
+                   :`<div class="dc-a flat">—</div>`)+`</div>`;
+    }
+    const gTot=colSum.reduce((a,b)=>a+b,0), gHas=colHas.some(Boolean);   // reconciles with both margins under any filter
+    html+=`<div class="corner ${cls(gTot)}"><div class="cn-l">Total</div>`+
+      (gHas?`<div class="cn-a">${eurCompact(gTot)}</div>`:`<div class="cn-a flat">—</div>`)+`</div>`;
     html+=`</div></div>`;
     any=true;
     m--; if(m<0){m=11;y--;}

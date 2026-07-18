@@ -133,6 +133,18 @@
     background:var(--cell-empty); box-shadow:inset 0 0 0 1px var(--border)}
   .wcell .wk-l{font-size:9px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.05em}
   .wcell .wk-a{font-size:13.5px; font-weight:760; font-variant-numeric:tabular-nums; letter-spacing:-.01em}
+
+  /* day-of-week total row (the bottom margin: sums each weekday column, corner reconciles to the month net) */
+  .dcell,.corner{display:flex; flex-direction:column; justify-content:center; gap:2px;
+    border-radius:11px; min-height:52px; padding:7px 9px; margin-top:6px;
+    background:var(--cell-empty); box-shadow:inset 0 0 0 1px var(--border)}
+  .dcell{align-items:center}
+  .dcell.weekend{opacity:.7}
+  .dcell .dc-l{font-size:9px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.05em}
+  .dcell .dc-a{font-size:13px; font-weight:740; font-variant-numeric:tabular-nums; letter-spacing:-.01em}
+  .corner{align-items:flex-end; box-shadow:inset 0 0 0 1px var(--border-strong)}
+  .corner .cn-l{font-size:9px; color:var(--text-2); font-weight:700; text-transform:uppercase; letter-spacing:.05em}
+  .corner .cn-a{font-size:14px; font-weight:820; font-variant-numeric:tabular-nums; letter-spacing:-.01em}
   .cell{
     position:relative; border-radius:11px; min-height:70px; padding:8px 9px;
     display:flex; flex-direction:column; justify-content:space-between;
