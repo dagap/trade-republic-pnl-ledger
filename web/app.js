@@ -4,6 +4,20 @@ const FLOWS = PAYLOAD.flows || [];
 const META = PAYLOAD.meta;
 const byDate = Object.fromEntries(DAYS.map(d => [d.d, d]));
 
+/* all-time running P&L up to and including each active day (built once) */
+const CUM_ALL = (() => {
+  const m={}; let c=0;
+  for(const d of [...DAYS].sort((a,b)=>a.d<b.d?-1:1)){ c+=d.p; m[d.d]=c; }
+  return m;
+})();
+/* running P&L within the selected period, rebuilt on every filter change */
+let CUM_RANGE = {};
+function buildCumRange(s,e){
+  const m={}; let c=0;
+  for(const d of DAYS.filter(d=>d.d>=s&&d.d<=e).sort((a,b)=>a.d<b.d?-1:1)){ c+=d.p; m[d.d]=c; }
+  return m;
+}
+
 const MONTHS = ["January","February","March","April","May","June","July",
   "August","September","October","November","December"];
 const WD = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -124,6 +138,7 @@ function cellColor(p, scale){
 /* ---------- calendar ---------- */
 function renderCalendar(s,e){
   const cal=document.getElementById("cal");
+  CUM_RANGE=buildCumRange(s,e);
   const scale=buildScale(s,e);
   const today=todayISO();
   const ps=parse(s), pe=parse(e);
@@ -213,6 +228,13 @@ function attachTips(){
       tip.querySelector('[data-k="f"]').textContent=eur(rec.f);
       tip.querySelector('[data-k="t"]').textContent=eur(rec.t);
       tip.querySelector('[data-k="n"]').textContent=rec.n;
+      const cr=tip.querySelector('[data-k="cr"]'), ca=tip.querySelector('[data-k="ca"]');
+      const vr=CUM_RANGE[rec.d]||0, va=CUM_ALL[rec.d]||0;
+      cr.textContent=eur(vr); cr.className=cls(vr);
+      ca.textContent=eur(va); ca.className=cls(va);
+      // the all-time row only adds information when the period starts after the first day
+      document.getElementById("t-cum-all").style.display =
+        (startEl.value||META.min_date)>META.min_date ? "" : "none";
       const pad=14; let x=ev.clientX+pad, y=ev.clientY+pad;
       const r=tip.getBoundingClientRect();
       if(x+r.width>window.innerWidth-8) x=ev.clientX-r.width-pad;

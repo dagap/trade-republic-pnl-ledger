@@ -229,6 +229,10 @@
   #tip .t-row{display:flex; justify-content:space-between; gap:20px; font-size:12.5px; padding:2px 0}
   #tip .t-row span:first-child{color:var(--muted)}
   #tip .t-row span:last-child{font-variant-numeric:tabular-nums; font-weight:600; color:var(--text-2)}
+  #tip .t-row span:last-child.pos{color:var(--pos-text)}
+  #tip .t-row span:last-child.neg{color:var(--neg-text)}
+  #tip .t-row span:last-child.flat{color:var(--muted)}
+  #tip .t-sep{height:1px; background:var(--border); margin:8px 0 7px}
 
   footer{color:var(--muted); font-size:12px; text-align:center; padding-top:6px; line-height:1.6}
   footer code{background:var(--surface-2); border:1px solid var(--border); padding:1px 6px; border-radius:6px; font-size:11.5px}

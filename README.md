@@ -30,8 +30,9 @@ own trading habits impossible to ignore.
 ## What it does
 
 - **Daily P&L calendar** — every trading day coloured green/red by size, with the
-  amount and trade count in the cell and a full breakdown on hover. Months stack
-  newest-first, with a weekly total in the right margin.
+  amount and trade count in the cell and a full breakdown on hover — including
+  the running total up to that day, both within the selected period and
+  all-time. Months stack newest-first, with a weekly total in the right margin.
 - **Realized P&L, done properly** — sells are matched against a running average
   cost per instrument, so profit lands on the day you *closed*, not the day you
   opened. Dividends and interest count as income; fees and capital-gains tax are
