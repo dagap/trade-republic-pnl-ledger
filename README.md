@@ -38,6 +38,11 @@ own trading habits impossible to ignore.
   opened. Dividends and interest count as income; fees and capital-gains tax are
   applied on their day; deposits and withdrawals are kept out of P&L.
 - **Equity curve** with the max drawdown marked.
+- **Month-by-month bars** — net P&L per month, green above the line and red
+  below, so a good or bad stretch is obvious at a glance. Hover a bar for the
+  trading days, win rate and trade count behind it. Months are clipped to the
+  selected range (marked with a `*`), so the bars always add up to the period
+  total.
 - **Win/loss profile** — average win vs. average loss, payoff ratio, and the
   payoff you'd need to break even at your win rate. (Turns out a good win rate
   doesn't save you if your losers are twice your winners.)

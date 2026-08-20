@@ -322,6 +322,7 @@ function renderEquity(s,e){
     dot.setAttribute("cx",px); dot.setAttribute("cy",py); dot.setAttribute("fill",col); dot.style.display="";
     cross.setAttribute("x1",px); cross.setAttribute("x2",px); cross.style.display="";
     tip.querySelector(".d").textContent=fmtShort(best.date);
+    tip.querySelector(".s").textContent="";
     const v=tip.querySelector(".v"); v.textContent=eur(best.v); v.className="v "+cls(best.v);
     let x=ev.clientX+14, y=ev.clientY+14, tr=tip.getBoundingClientRect();
     if(x+tr.width>window.innerWidth-8) x=ev.clientX-tr.width-14;
@@ -329,6 +330,113 @@ function renderEquity(s,e){
     tip.style.left=x+"px"; tip.style.top=y+"px"; tip.classList.add("show");
   });
   hit.addEventListener("mouseleave", ()=>{ tip.classList.remove("show"); dot.style.display="none"; cross.style.display="none"; });
+}
+
+/* ---------- month-by-month bars ---------- */
+function monthlyStats(s,e){
+  const out=[], ps=parse(s), pe=parse(e);
+  let y=ps.y, m=ps.m;
+  while(y<pe.y || (y===pe.y && m<=pe.m)){
+    const first=iso(y,m,1), last=iso(y,m,daysInMonth(y,m));
+    const ms=first>s?first:s, me=last<e?last:e;        // clipped, so the bars sum to the period net
+    const a=agg(ms,me);
+    out.push({y,m,label:MONTHS[m].slice(0,3), full:`${MONTHS[m]} ${y}`,
+              net:a.net, days:a.days, trades:a.trades, win:a.win, loss:a.loss,
+              winRate:a.winRate,
+              partial:(ms>first&&ms>META.min_date)||(me<last&&me<META.max_date)});
+    m++; if(m>11){ m=0; y++; }
+  }
+  return out;
+}
+/* rounded at the data end, square on the baseline */
+function barPath(x,y,w,h,up){
+  const r=Math.min(4,w/2,h);
+  return up
+    ? `M${x} ${y+h} L${x} ${y+r} Q${x} ${y} ${x+r} ${y} L${x+w-r} ${y} Q${x+w} ${y} ${x+w} ${y+r} L${x+w} ${y+h} Z`
+    : `M${x} ${y} L${x} ${y+h-r} Q${x} ${y+h} ${x+r} ${y+h} L${x+w-r} ${y+h} Q${x+w} ${y+h} ${x+w} ${y+h-r} L${x+w} ${y} Z`;
+}
+function renderMonthly(s,e){
+  const host=document.getElementById("mo");
+  const splitEl=document.getElementById("mo-split"), avgEl=document.getElementById("mo-avg");
+  const ms=monthlyStats(s,e), traded=ms.filter(x=>x.days>0);
+  if(!traded.length){
+    host.innerHTML=`<div class="empty-state" style="padding:34px">No data in the selected range.</div>`;
+    splitEl.textContent=""; avgEl.textContent=""; return;
+  }
+  const up=traded.filter(x=>x.net>0.005).length, dn=traded.filter(x=>x.net<-0.005).length;
+  const avg=traded.reduce((a,c)=>a+c.net,0)/traded.length;
+  splitEl.innerHTML=`<b class="pos">${up}</b> up · <b class="neg">${dn}</b> down · avg`;
+  avgEl.textContent=eur(avg); avgEl.className="c-val "+cls(avg);
+
+  const nets=traded.map(x=>x.net);
+  let mx=Math.max(0,...nets), mn=Math.min(0,...nets);
+  const pad=Math.max((mx-mn)*0.16, 1); mx+=pad; mn-=pad;
+
+  const VBW=1000, VBH=224, PT=20, PB=40, SLOT_MAX=112;
+  const n=ms.length, plotH=VBH-PT-PB;
+  const slot=Math.min((VBW-16)/n, SLOT_MAX);
+  const PL=(VBW-slot*n)/2;                                  // centre the group when months are few
+  const bw=Math.max(6, Math.min(slot*0.5, 24));
+  const Y=v=>PT+(mx-v)/(mx-mn)*plotH, zeroY=Y(0);
+
+  // label every bar when they fit; otherwise only the best and worst month
+  const labelAll=slot>=46;
+  const best=traded.reduce((a,c)=>c.net>a.net?c:a), worst=traded.reduce((a,c)=>c.net<a.net?c:a);
+  const everyOther=slot<34;
+
+  let marks="";
+  ms.forEach((d,i)=>{
+    const cx=PL+(i+0.5)*slot, x=cx-bw/2;
+    if(d.days===0){
+      marks+=`<rect class="bar" data-i="${i}" x="${x.toFixed(1)}" y="${(zeroY-1).toFixed(1)}" width="${bw.toFixed(1)}" height="2" rx="1" fill="var(--border-strong)"/>`;
+    } else {
+      const pos=d.net>=0, h=Math.max(Math.abs(zeroY-Y(d.net)),3);
+      const y=pos?zeroY-h:zeroY;
+      const fill=Math.abs(d.net)<0.005?"var(--border-strong)":(pos?"var(--pos)":"var(--neg)");
+      marks+=`<path class="bar" data-i="${i}" d="${barPath(x,y,bw,h,pos)}" fill="${fill}">`+
+             `<title>${d.full}: ${eur(d.net)} over ${d.days} trading day${d.days===1?"":"s"}</title></path>`;
+      if(labelAll || d===best || d===worst)
+        marks+=`<text x="${cx.toFixed(1)}" y="${(pos?y-7:y+h+14).toFixed(1)}" text-anchor="middle" `+
+               `font-size="11.5" font-weight="650" fill="var(--text-2)">${eurCompact(d.net)}</text>`;
+    }
+    if(!everyOther || i%2===0 || d.m===0){          // never thin away a January — it anchors the year
+      marks+=`<text x="${cx.toFixed(1)}" y="${VBH-20}" text-anchor="middle" font-size="12" font-weight="600" `+
+             `fill="${d.days?"var(--text-2)":"var(--muted)"}">${d.label}${d.partial?"*":""}</text>`;
+      if(d.m===0 || i===0)
+        marks+=`<text x="${cx.toFixed(1)}" y="${VBH-6}" text-anchor="middle" font-size="10.5" fill="var(--muted)">${d.y}</text>`;
+    }
+    marks+=`<rect class="hit" data-i="${i}" x="${(cx-slot/2).toFixed(1)}" y="0" width="${slot.toFixed(1)}" height="${VBH-PB+6}" fill="transparent"/>`;
+  });
+
+  host.innerHTML=`
+    <svg viewBox="0 0 ${VBW} ${VBH}" role="img" aria-label="Net P&amp;L by month">
+      <line x1="${PL.toFixed(1)}" y1="${zeroY.toFixed(1)}" x2="${(VBW-PL).toFixed(1)}" y2="${zeroY.toFixed(1)}" stroke="var(--border-strong)" stroke-width="1"/>
+      ${marks}
+    </svg>` + (ms.some(d=>d.partial)
+      ? `<div class="axis"><span>* month clipped by the selected date range</span></div>` : "");
+
+  const svg=host.querySelector("svg"), tip=document.getElementById("eq-tip");
+  svg.querySelectorAll(".hit").forEach(hit=>{
+    hit.addEventListener("mousemove", ev=>{
+      const d=ms[Number(hit.dataset.i)];
+      svg.classList.add("hovering");
+      svg.querySelectorAll(".bar").forEach(b=>b.classList.toggle("on", b.dataset.i===hit.dataset.i));
+      tip.querySelector(".d").textContent=d.full+(d.partial?" · partial":"");
+      const v=tip.querySelector(".v");
+      v.textContent=d.days?eur(d.net):"no activity"; v.className="v "+(d.days?cls(d.net):"flat");
+      tip.querySelector(".s").textContent = d.days
+        ? `${d.days} trading day${d.days===1?"":"s"} · ${(d.win+d.loss)?Math.round(d.winRate*100)+"% win":"no closed days"} · ${d.trades} trade${d.trades===1?"":"s"}`
+        : "";
+      let x=ev.clientX+14, y=ev.clientY+14; const tr=tip.getBoundingClientRect();
+      if(x+tr.width>window.innerWidth-8) x=ev.clientX-tr.width-14;
+      if(y+tr.height>window.innerHeight-8) y=ev.clientY-tr.height-14;
+      tip.style.left=x+"px"; tip.style.top=y+"px"; tip.classList.add("show");
+    });
+  });
+  svg.addEventListener("mouseleave", ()=>{
+    tip.classList.remove("show"); svg.classList.remove("hovering");
+    svg.querySelectorAll(".bar.on").forEach(b=>b.classList.remove("on"));
+  });
 }
 
 /* ---------- analytics: win/loss profile ---------- */
@@ -461,6 +569,7 @@ function renderRolling(s,e){
     dot.setAttribute("cx",px); dot.setAttribute("cy",py); dot.setAttribute("fill",col); dot.style.display="";
     cross.setAttribute("x1",px); cross.setAttribute("x2",px); cross.style.display="";
     tip.querySelector(".d").textContent=fmtShort(best.date);
+    tip.querySelector(".s").textContent="";
     const v=tip.querySelector(".v"); v.textContent=best.v.toFixed(2)+"× payoff"; v.className="v "+(best.v>=be?"pos":"neg");
     let x=ev.clientX+14, y=ev.clientY+14, tr=tip.getBoundingClientRect();
     if(x+tr.width>window.innerWidth-8) x=ev.clientX-tr.width-14;
@@ -476,7 +585,8 @@ function clampToData(v){ return v<META.min_date?META.min_date : v>META.max_date?
 function refresh(){
   let s=startEl.value||META.min_date, e=endEl.value||META.max_date;
   if(s>e){ [s,e]=[e,s]; startEl.value=s; endEl.value=e; }
-  renderSummary(s,e); renderEquity(s,e); renderProfile(s,e); renderWeekday(s,e); renderRolling(s,e); renderCalendar(s,e); markPreset();
+  renderSummary(s,e); renderEquity(s,e); renderMonthly(s,e); renderProfile(s,e);
+  renderWeekday(s,e); renderRolling(s,e); renderCalendar(s,e); markPreset();
 }
 function setRange(s,e){ startEl.value=clampToData(s); endEl.value=clampToData(e); refresh();
   document.getElementById("cal").scrollTop=0; }   // latest month is at the top
