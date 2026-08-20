@@ -145,7 +145,8 @@ function renderCalendar(s,e){
   let y=pe.y, m=pe.m, html="";   // newest month first, descending to earliest
   let any=false;
   while(y>ps.y || (y===ps.y && m>=ps.m)){
-    const mAgg=agg(iso(y,m,1), iso(y,m,daysInMonth(y,m)));
+    const m0=iso(y,m,1), m1=iso(y,m,daysInMonth(y,m));
+    const mAgg=agg(m0<s?s:m0, m1>e?e:m1);   // clipped like the cells and margins below, so the card agrees with itself
     html+=`<div class="month">
       <div class="month-head">
         <div class="m-name">${MONTHS[m]} <span>${y}</span></div>
