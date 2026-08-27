@@ -1,6 +1,6 @@
 """Tests for the P&L analysis — the logic that actually matters.
 
-Covers realized P&L via average cost, the fee/tax handling (including the
+Covers realized P&L via FIFO lots net of fees, the fee/tax handling (including the
 withheld-then-refunded case that nets to zero), income vs. transfers, and the
 missing-cost-basis edge case.
 """
@@ -36,21 +36,21 @@ def test_round_trip_realized_pnl():
     ]
     days, _flows, _meta = compute_daily(rows)
     d = day(days, "2026-01-05")
-    assert d["r"] == 51.0     # 681 proceeds - 630 cost
-    assert d["f"] == -2.0     # two €1 fees
-    assert d["p"] == 49.0     # net after fees
+    assert d["r"] == 49.0     # 681 proceeds - 630 cost - two €1 fees
+    assert d["f"] == -2.0     # two €1 fees (informational, already in r)
+    assert d["p"] == 49.0
     assert d["n"] == 2
 
 
-def test_average_cost_basis():
-    # Buy 100 @ 10 then 100 @ 12 (avg 11); sell 100 @ 13 -> (13-11)*100 = 200.
+def test_first_lot_consumed_first():
+    # Buy 100 @ 10 then 100 @ 12; sell 100 @ 13 -> FIFO takes the @10 lot: 300.
     rows = [
         row(date="2026-02-01", type="BUY", symbol="Y", shares="100", amount="-1000"),
         row(date="2026-02-01", type="BUY", symbol="Y", shares="100", amount="-1200"),
         row(date="2026-02-02", type="SELL", symbol="Y", shares="-100", amount="1300"),
     ]
     days, _flows, _meta = compute_daily(rows)
-    assert round(day(days, "2026-02-02")["r"], 2) == 200.0
+    assert round(day(days, "2026-02-02")["r"], 2) == 300.0
 
 
 def test_tax_withheld_then_refunded_nets_to_zero():
@@ -103,3 +103,78 @@ def test_build_payload_totals():
     assert meta["deposits"] == 500.0
     assert meta["net_deposited"] == 500.0
     assert meta["n_txns"] == 3
+
+
+def test_fifo_lot_matching():
+    # Buy 100 @ 40.03 then 100 @ 39.29; sell 100 @ 41.11 must consume the
+    # FIRST lot (German § 20 Abs. 4 S. 7 EStG), not the average.
+    rows = [
+        row(date="2026-08-26", type="BUY", symbol="G", shares="100", amount="-4003"),
+        row(date="2026-08-26", type="BUY", symbol="G", shares="100", amount="-3929"),
+        row(date="2026-08-26", type="SELL", symbol="G", shares="-100", amount="4111"),
+    ]
+    days, _flows, _meta = compute_daily(rows)
+    assert day(days, "2026-08-26")["r"] == 108.0   # 4111 - 4003, not 145
+
+
+def test_fifo_partial_lot_consumption():
+    # Sell 150 out of lots 100@10 and 100@12: 100 from lot 1, 50 from lot 2.
+    rows = [
+        row(date="2026-02-01", type="BUY", symbol="Y", shares="100", amount="-1000"),
+        row(date="2026-02-01", type="BUY", symbol="Y", shares="100", amount="-1200"),
+        row(date="2026-02-02", type="SELL", symbol="Y", shares="-150", amount="1950"),
+        row(date="2026-02-03", type="SELL", symbol="Y", shares="-50", amount="650"),
+    ]
+    days, _flows, _meta = compute_daily(rows)
+    assert day(days, "2026-02-02")["r"] == 350.0   # 1950 - (1000 + 600)
+    assert day(days, "2026-02-03")["r"] == 50.0    # 650 - 600
+
+
+def test_realized_is_net_of_fees_and_not_double_counted():
+    # TR nets the €1 buy fee and €1 sell fee into the gain: 51 gross -> 49.
+    rows = [
+        row(date="2026-01-05", type="BUY", symbol="X", shares="100", amount="-630", fee="-1"),
+        row(date="2026-01-05", type="SELL", symbol="X", shares="-100", amount="681", fee="-1"),
+    ]
+    d = day(compute_daily(rows)[0], "2026-01-05")
+    assert d["r"] == 49.0
+    assert d["f"] == -2.0     # still reported for the Fees tile...
+    assert d["p"] == 49.0     # ...but not deducted a second time
+
+
+def test_buy_fee_is_realized_when_the_lot_is_sold():
+    # Buy fee is an acquisition cost: it hits P&L on the sell day, not the buy day.
+    rows = [
+        row(date="2026-01-05", type="BUY", symbol="X", shares="100", amount="-630", fee="-1"),
+        row(date="2026-01-06", type="SELL", symbol="X", shares="-100", amount="681", fee="-1"),
+    ]
+    days, _flows, _meta = compute_daily(rows)
+    assert day(days, "2026-01-05")["p"] == 0.0
+    assert day(days, "2026-01-05")["f"] == -1.0
+    assert day(days, "2026-01-06")["r"] == 49.0
+    assert day(days, "2026-01-06")["p"] == 49.0
+
+
+def test_real_export_tax_reconciles_with_fifo_net_gain():
+    """Trade Republic withholds 26.375% (Abgeltungsteuer + Soli) on the
+    FIFO, fee-net gain of each profitable sell — so the export's ``tax`` column
+    is an independent oracle for the realized figure. Skipped without a real
+    export."""
+    import os
+
+    import pytest
+
+    from loader import load_transactions
+
+    path = os.path.join(os.path.dirname(__file__), "..", "data", "transactions.csv")
+    if not os.path.exists(path):
+        pytest.skip("no real export in data/")
+    rows = load_transactions(os.path.dirname(path))
+    day_rows = [r for r in rows if r["date"] == "2026-08-26" and r["type"] in ("BUY", "SELL")]
+    if not day_rows:
+        pytest.skip("26 Aug 2026 not in export")
+    d = day(compute_daily(rows)[0], "2026-08-26")
+    # Sells that day: (124-2) + (25-3) + (108-2) - (9+2) = 239
+    assert d["r"] == 239.0
+    withheld = sum(_f(r["tax"]) for r in day_rows)
+    assert abs(withheld - (-(122 + 22 + 106) * 0.26375)) < 0.05

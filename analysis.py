@@ -1,9 +1,13 @@
 """Analysis for the P&L dashboard.
 
 Turns raw transaction rows into per-day P&L records and summary metadata.
-Realized P&L uses a running average cost per instrument; dividends & interest
-count as income; fees and capital-gains tax (withheld on sells, refunded via
-"Tax Optimisation") are applied on their day; cash transfers are ignored.
+Realized P&L matches sells against buy lots first-in-first-out per instrument
+(the method German tax law mandates, § 20 Abs. 4 S. 7 EStG) and is net of
+trading fees: a buy fee is capitalised into the lot's cost and a sell fee is
+deducted from proceeds, so the realized figure is the one Trade Republic taxes.
+Dividends & interest count as income; capital-gains tax (withheld on sells,
+refunded via "Tax Optimisation") is applied on its day; cash transfers are
+ignored.
 
 This module is pure computation — no file, network or template I/O — so it can
 be unit-tested and reused independently of how the data is loaded or rendered.
@@ -35,14 +39,17 @@ def compute_daily(rows: list[dict]):
     """Return ``(daily_records, flows, meta)``.
 
     ``daily_records`` is a list of ``{d, p, r, i, f, t, n}`` sorted by date:
-        d = ISO date, p = net P&L, r = realized trading P&L, i = income
-        (dividends + interest), f = fees (<=0), t = tax (signed: withheld <0,
-        refunded >0), n = trade count.
+        d = ISO date, p = net P&L, r = realized trading P&L (FIFO, net of
+        fees), i = income (dividends + interest), f = fees paid that day (<=0,
+        informational — already inside ``r`` on the day the lot is sold, so
+        NOT added to ``p`` again), t = tax (signed: withheld <0, refunded >0),
+        n = trade count.
     ``flows`` is a list of ``{d, dep, wd}`` for dates with cash movements:
         dep = deposits (>=0), wd = withdrawals (<=0).
     """
-    # symbol -> {"qty": float, "cost": float}  (cost = money spent, positive)
-    positions: dict[str, dict] = {}
+    # symbol -> FIFO queue of open lots [qty, cost] (cost = money spent incl.
+    # buy fee, positive). Sells consume from the front.
+    positions: dict[str, list[list[float]]] = {}
     daily = defaultdict(lambda: {"r": 0.0, "i": 0.0, "f": 0.0, "t": 0.0, "n": 0})
     flows_by_date = defaultdict(lambda: {"dep": 0.0, "wd": 0.0})
     missing_basis = 0
@@ -64,32 +71,37 @@ def compute_daily(rows: list[dict]):
         shares = _f(row.get("shares"))
 
         if typ == TRADE_BUY:
-            pos = positions.setdefault(symbol, {"qty": 0.0, "cost": 0.0})
-            pos["qty"] += shares            # shares positive on a buy
-            pos["cost"] += -amount          # amount negative -> cost positive
+            lots = positions.setdefault(symbol, [])
+            # amount negative -> cost positive; the buy fee is an acquisition
+            # cost and is realized when this lot is sold.
+            lots.append([shares, -amount - fee])
             rec = daily[date]
-            rec["f"] += fee                 # buy fee expensed on its day
+            rec["f"] += fee
             rec["t"] += tax
             rec["n"] += 1
 
         elif typ == TRADE_SELL:
             qty_sold = -shares              # shares negative on a sell
-            pos = positions.get(symbol)
-            if pos and pos["qty"] > 1e-9:
-                avg = pos["cost"] / pos["qty"]
-            else:
-                avg = 0.0                   # opened before our data window
-                missing_basis += 1
-            cost_removed = avg * qty_sold
-            proceeds = amount               # gross, positive
+            lots = positions.get(symbol, [])
+            remaining = qty_sold
+            cost_removed = 0.0
+            while remaining > 1e-9 and lots:
+                lot = lots[0]
+                take = min(lot[0], remaining)
+                cost_removed += lot[1] * take / lot[0]
+                lot[1] -= lot[1] * take / lot[0]
+                lot[0] -= take
+                remaining -= take
+                if lot[0] <= 1e-9:
+                    lots.pop(0)
+            if remaining > 1e-9:
+                missing_basis += 1          # opened before our data window
+            proceeds = amount + fee         # gross, positive; sell fee netted
             rec = daily[date]
-            rec["r"] += proceeds - cost_removed   # realized trading P&L (pre-tax)
+            rec["r"] += proceeds - cost_removed   # realized P&L, net of fees
             rec["f"] += fee
             rec["t"] += tax                 # capital-gains tax withheld (<=0)
             rec["n"] += 1
-            if pos:
-                pos["qty"] = max(0.0, pos["qty"] - qty_sold)
-                pos["cost"] = max(0.0, pos["cost"] - cost_removed)
 
         elif typ in INCOME_TYPES:
             rec = daily[date]
@@ -112,7 +124,7 @@ def compute_daily(rows: list[dict]):
     daily_records = []
     for date in sorted(daily):
         v = daily[date]
-        p = v["r"] + v["i"] + v["f"] + v["t"]
+        p = v["r"] + v["i"] + v["t"]    # fees already inside r
         daily_records.append(
             {
                 "d": date,

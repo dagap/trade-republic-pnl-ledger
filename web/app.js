@@ -653,7 +653,7 @@ themeBtn.addEventListener("click", ()=>{
     ? ` · ${META.missing_basis} sell(s) had no prior cost basis in the data (treated as zero cost)`
     : "";
   document.getElementById("footer").innerHTML =
-    `Realized P&amp;L via running average-cost per instrument · dividends &amp; interest as income · fees deducted · capital-gains tax withheld and tax-optimisation refunds both included · cash transfers excluded${note}.<br>`+
+    `Realized P&amp;L via FIFO lot matching per instrument (German tax method), net of trading fees · dividends &amp; interest as income · capital-gains tax withheld and tax-optimisation refunds both included · cash transfers excluded${note}.<br>`+
     `Regenerate with <code>python build.py</code> after updating <code>data/*.csv</code>.`;
   startEl.min=endEl.min=META.min_date; startEl.max=endEl.max=META.max_date;
   startEl.value=META.min_date; endEl.value=META.max_date;

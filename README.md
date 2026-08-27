@@ -33,10 +33,12 @@ own trading habits impossible to ignore.
   amount and trade count in the cell and a full breakdown on hover — including
   the running total up to that day, both within the selected period and
   all-time. Months stack newest-first, with a weekly total in the right margin.
-- **Realized P&L, done properly** — sells are matched against a running average
-  cost per instrument, so profit lands on the day you *closed*, not the day you
-  opened. Dividends and interest count as income; fees and capital-gains tax are
-  applied on their day; deposits and withdrawals are kept out of P&L.
+- **Realized P&L the way the taxman sees it** — sells are matched against buy
+  lots first-in-first-out per instrument (the method German tax law mandates)
+  and the gain is net of trading fees, so it ties out to what Trade Republic
+  shows and taxes. Profit lands on the day you *closed*, not the day you opened.
+  Dividends and interest count as income; capital-gains tax is applied on its
+  day; deposits and withdrawals are kept out of P&L.
 - **Equity curve** with the max drawdown marked.
 - **Month-by-month bars** — net P&L per month, green above the line and red
   below, so a good or bad stretch is obvious at a glance. Hover a bar for the
