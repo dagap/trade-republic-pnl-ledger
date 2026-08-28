@@ -136,20 +136,35 @@ function cellColor(p, scale){
 }
 
 /* ---------- calendar ---------- */
+let CAL_VIEW=null;   // {y,m} of the month currently shown; null = latest month of the range
+function monthIdx(y,m){ return y*12+m; }
+function calBounds(s,e){ const ps=parse(s), pe=parse(e); return {lo:monthIdx(ps.y,ps.m), hi:monthIdx(pe.y,pe.m)}; }
+function calStep(n){ const v=CAL_VIEW||{}; const i=monthIdx(v.y,v.m)+n; CAL_VIEW={y:Math.floor(i/12), m:((i%12)+12)%12}; refresh(); }
+function calToday(){ const t=parse(todayISO()); CAL_VIEW={y:t.y,m:t.m}; refresh(); }
 function renderCalendar(s,e){
   const cal=document.getElementById("cal");
   CUM_RANGE=buildCumRange(s,e);
   const scale=buildScale(s,e);
   const today=todayISO();
-  const ps=parse(s), pe=parse(e);
-  let y=pe.y, m=pe.m, html="";   // newest month first, descending to earliest
-  let any=false;
-  while(y>ps.y || (y===ps.y && m>=ps.m)){
+  const {lo,hi}=calBounds(s,e);
+  // one month at a time: clamp the requested view into the selected range, default to the latest month
+  let vi = CAL_VIEW ? monthIdx(CAL_VIEW.y,CAL_VIEW.m) : hi;
+  vi=Math.max(lo,Math.min(hi,vi));
+  const y=Math.floor(vi/12), m=vi%12;
+  CAL_VIEW={y,m};
+  let html="";
+  {
     const m0=iso(y,m,1), m1=iso(y,m,daysInMonth(y,m));
     const mAgg=agg(m0<s?s:m0, m1>e?e:m1);   // clipped like the cells and margins below, so the card agrees with itself
+    const ti=parse(today), todayIn = monthIdx(ti.y,ti.m)>=lo && monthIdx(ti.y,ti.m)<=hi;
     html+=`<div class="month">
       <div class="month-head">
-        <div class="m-name">${MONTHS[m]} <span>${y}</span></div>
+        <div class="cal-nav">
+          <button class="cal-btn" id="cal-prev" aria-label="Previous month" ${vi<=lo?"disabled":""}>&#8249;</button>
+          <div class="m-name">${MONTHS[m]} <span>${y}</span></div>
+          <button class="cal-btn" id="cal-next" aria-label="Next month" ${vi>=hi?"disabled":""}>&#8250;</button>
+          <button class="cal-btn cal-today" id="cal-today" ${todayIn?"":"disabled"}>Today</button>
+        </div>
         <div class="m-total ${cls(mAgg.net)}">${eur(mAgg.net)}</div>
       </div>
       <div class="weekdays">${WD.map(w=>`<div>${w}</div>`).join("")}<div class="wk-head">Week</div></div>
@@ -206,10 +221,11 @@ function renderCalendar(s,e){
     html+=`<div class="corner ${cls(gTot)}"><div class="cn-l">Total</div>`+
       (gHas?`<div class="cn-a">${eurCompact(gTot)}</div>`:`<div class="cn-a flat">—</div>`)+`</div>`;
     html+=`</div></div>`;
-    any=true;
-    m--; if(m<0){m=11;y--;}
   }
-  cal.innerHTML = any ? html : `<div class="empty-state">No data in the selected range.</div>`;
+  cal.innerHTML = html;
+  document.getElementById("cal-prev").addEventListener("click", ()=>calStep(-1));
+  document.getElementById("cal-next").addEventListener("click", ()=>calStep(1));
+  document.getElementById("cal-today").addEventListener("click", calToday);
   attachTips();
 }
 
@@ -589,8 +605,7 @@ function refresh(){
   renderSummary(s,e); renderEquity(s,e); renderMonthly(s,e); renderProfile(s,e);
   renderWeekday(s,e); renderRolling(s,e); renderCalendar(s,e); markPreset();
 }
-function setRange(s,e){ startEl.value=clampToData(s); endEl.value=clampToData(e); refresh();
-  document.getElementById("cal").scrollTop=0; }   // latest month is at the top
+function setRange(s,e){ startEl.value=clampToData(s); endEl.value=clampToData(e); CAL_VIEW=null; refresh(); }   // jump to the latest month of the new range
 
 document.getElementById("presets").addEventListener("click", ev=>{
   const b=ev.target.closest(".preset"); if(!b) return;

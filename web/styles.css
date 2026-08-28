@@ -105,19 +105,23 @@
     background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
     padding:6px; position:relative;
   }
-  .cal-scroll{max-height:70vh; overflow-y:auto; padding:14px 16px; scroll-behavior:smooth}
-  .cal-scroll::-webkit-scrollbar{width:10px}
-  .cal-scroll::-webkit-scrollbar-thumb{background:var(--border-strong); border-radius:999px; border:2px solid var(--surface)}
-  .cal-scroll::-webkit-scrollbar-track{background:transparent}
+  .cal-scroll{padding:14px 16px}
 
-  .month{margin-bottom:26px}
-  .month:last-child{margin-bottom:6px}
+  .month{margin-bottom:6px}
   .month-head{
-    display:flex; align-items:baseline; justify-content:space-between;
-    padding:2px 2px 12px; position:sticky; top:-14px; background:var(--surface);
-    z-index:2;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:2px 2px 12px;
   }
-  .month-head .m-name{font-size:15px; font-weight:640; letter-spacing:-.01em}
+  .cal-nav{display:flex; align-items:center; gap:8px}
+  .cal-btn{
+    border:1px solid var(--border); background:transparent; color:var(--text-2);
+    height:30px; min-width:30px; padding:0 8px; border-radius:8px; cursor:pointer;
+    font-size:16px; line-height:1; font-family:inherit; transition:.13s all;
+  }
+  .cal-btn.cal-today{font-size:12.5px; font-weight:560; padding:0 12px; margin-left:4px}
+  .cal-btn:hover:not(:disabled){border-color:var(--border-strong); color:var(--text)}
+  .cal-btn:disabled{opacity:.35; cursor:default}
+  .month-head .m-name{font-size:15px; font-weight:640; letter-spacing:-.01em; min-width:130px; text-align:center}
   .month-head .m-name span{color:var(--muted); font-weight:500; margin-left:6px}
   .month-head .m-total{font-size:14px; font-weight:680; font-variant-numeric:tabular-nums}
 
