@@ -20,12 +20,12 @@ function buildCumRange(s,e){
 
 const MONTHS = ["January","February","March","April","May","June","July",
   "August","September","October","November","December"];
-const WD = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const WD = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];   // calendar runs Sunday-first
 
 /* ---------- date helpers (string-based, timezone-safe) ---------- */
 function parse(s){ const [y,m,d]=s.split("-").map(Number); return {y,m:m-1,d}; }
 function iso(y,m,d){ return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`; }
-function mondayIdx(y,m,d){ return (new Date(y,m,d).getDay()+6)%7; }
+function weekdayIdx(y,m,d){ return new Date(y,m,d).getDay(); }   // 0=Sun … 6=Sat
 function daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
 function addDays(s,n){ const p=parse(s); const dt=new Date(p.y,p.m,p.d+n); return iso(dt.getFullYear(),dt.getMonth(),dt.getDate()); }
 function todayISO(){ const t=new Date(); return iso(t.getFullYear(),t.getMonth(),t.getDate()); }
@@ -169,7 +169,7 @@ function renderCalendar(s,e){
       </div>
       <div class="weekdays">${WD.map(w=>`<div>${w}</div>`).join("")}<div class="wk-head">Week</div></div>
       <div class="grid">`;
-    const lead=mondayIdx(y,m,1);
+    const lead=weekdayIdx(y,m,1);
     const dim=daysInMonth(y,m);
     let col=0, wkSum=0, wkHas=false;
     const colSum=Array(7).fill(0), colHas=Array(7).fill(false);   // per-weekday column totals (bottom margin)
@@ -182,7 +182,7 @@ function renderCalendar(s,e){
     for(let i=0;i<lead;i++){ html+=`<div class="cell blank"></div>`; col++; }
     for(let day=1;day<=dim;day++){
       const ds=iso(y,m,day);
-      const wknd=[5,6].includes(mondayIdx(y,m,day));
+      const wknd=[0,6].includes(weekdayIdx(y,m,day));
       const inRange = ds>=s && ds<=e;
       const rec=byDate[ds];
       const isToday = ds===today ? " today":"";
@@ -205,14 +205,14 @@ function renderCalendar(s,e){
         html+=`<div class="cell empty${wk}${isToday}"><div class="daynum">${day}</div></div>`;
       }
       if(inRange && rec){ wkSum+=rec.p; wkHas=true;
-        const ci=mondayIdx(y,m,day); colSum[ci]+=rec.p; colHas[ci]=true; }
+        const ci=weekdayIdx(y,m,day); colSum[ci]+=rec.p; colHas[ci]=true; }
       col++;
       if(col===7){ flushWeek(); col=0; }
     }
     if(col>0){ while(col<7){ html+=`<div class="cell blank"></div>`; col++; } flushWeek(); }
     // bottom margin: per-weekday column totals + corner grand total (reconciles to month net)
     for(let ci=0;ci<7;ci++){
-      const wknd=[5,6].includes(ci);
+      const wknd=[0,6].includes(ci);
       html+=`<div class="dcell${wknd?" weekend":""}"><div class="dc-l">${WD[ci]}</div>`+
         (colHas[ci]?`<div class="dc-a ${cls(colSum[ci])}">${eurCompact(colSum[ci])}</div>`
                    :`<div class="dc-a flat">—</div>`)+`</div>`;
