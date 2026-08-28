@@ -142,10 +142,14 @@ def compute_daily(rows: list[dict]):
         for d, v in sorted(flows_by_date.items())
     ]
 
+    # The data window spans every dated event, including pure cash-transfer
+    # days, so an "All-time" range filter in the dashboard never drops a
+    # deposit or withdrawal that happened on a day with no trades.
+    all_dates = sorted({d["d"] for d in daily_records} | {f["d"] for f in flows})
     meta = {
         "missing_basis": missing_basis,
-        "min_date": daily_records[0]["d"] if daily_records else None,
-        "max_date": daily_records[-1]["d"] if daily_records else None,
+        "min_date": all_dates[0] if all_dates else None,
+        "max_date": all_dates[-1] if all_dates else None,
         "n_days": len(daily_records),
     }
     return daily_records, flows, meta

@@ -178,3 +178,18 @@ def test_real_export_tax_reconciles_with_fifo_net_gain():
     assert d["r"] == 239.0
     withheld = sum(_f(r["tax"]) for r in day_rows)
     assert abs(withheld - (-(122 + 22 + 106) * 0.26375)) < 0.05
+
+
+def test_date_window_includes_transfer_only_days():
+    """A deposit on a day with no trades must still fall inside the data window,
+    otherwise the dashboard's "All-time" funding total silently drops it."""
+    rows = [
+        {"date": "2026-05-17", "type": "TRANSFER_INSTANT_INBOUND", "amount": "975"},
+        {"date": "2026-05-18", "type": "BUY", "symbol": "X", "shares": "1", "amount": "-100", "fee": "0", "tax": "0"},
+        {"date": "2026-05-19", "type": "SELL", "symbol": "X", "shares": "-1", "amount": "110", "fee": "0", "tax": "0"},
+        {"date": "2026-05-20", "type": "TRANSFER_INSTANT_OUTBOUND", "amount": "-50"},
+    ]
+    meta = build_payload(rows)["meta"]
+    assert meta["min_date"] == "2026-05-17"
+    assert meta["max_date"] == "2026-05-20"
+    assert meta["deposits"] == 975.0
