@@ -139,8 +139,18 @@ function cellColor(p, scale){
 let CAL_VIEW=null;   // {y,m} of the month currently shown; null = latest month of the range
 function monthIdx(y,m){ return y*12+m; }
 function calBounds(s,e){ const ps=parse(s), pe=parse(e); return {lo:monthIdx(ps.y,ps.m), hi:monthIdx(pe.y,pe.m)}; }
-function calStep(n){ const v=CAL_VIEW||{}; const i=monthIdx(v.y,v.m)+n; CAL_VIEW={y:Math.floor(i/12), m:((i%12)+12)%12}; refresh(); }
-function calToday(){ const t=parse(todayISO()); CAL_VIEW={y:t.y,m:t.m}; refresh(); }
+// Month navigation redraws only the calendar. Going through refresh() would
+// rebuild every panel on the page, which briefly collapses the document height
+// and makes the browser yank the scroll position around.
+function calRedraw(focusId){
+  let s=startEl.value||META.min_date, e=endEl.value||META.max_date;
+  if(s>e) [s,e]=[e,s];
+  renderCalendar(s,e);
+  const b=focusId && document.getElementById(focusId);
+  if(b && !b.disabled) b.focus({preventScroll:true});
+}
+function calStep(n){ const v=CAL_VIEW||{}; const i=monthIdx(v.y,v.m)+n; CAL_VIEW={y:Math.floor(i/12), m:((i%12)+12)%12}; calRedraw(n<0?"cal-prev":"cal-next"); }
+function calToday(){ const t=parse(todayISO()); CAL_VIEW={y:t.y,m:t.m}; calRedraw("cal-today"); }
 function renderCalendar(s,e){
   const cal=document.getElementById("cal");
   CUM_RANGE=buildCumRange(s,e);
