@@ -42,6 +42,10 @@ def _f(v: str) -> float:
 def compute_daily(rows: list[dict]):
     """Return ``(daily_records, flows, meta)``.
 
+    ``meta["trades"]`` is a list of ``{d, p}`` — one entry per SELL with its
+    realized P&L (FIFO, net of fees) — so the dashboard can profile wins and
+    losses per closed trade, not only per day.
+
     ``daily_records`` is a list of ``{d, p, r, i, f, t, n}`` sorted by date:
         d = ISO date, p = net P&L, r = realized trading P&L (FIFO, net of
         fees), i = income (dividends + interest), f = fees paid that day (<=0,
@@ -58,6 +62,7 @@ def compute_daily(rows: list[dict]):
     flows_by_date = defaultdict(lambda: {"dep": 0.0, "wd": 0.0})
     unknown_types: dict[str, int] = defaultdict(int)
     missing_basis = 0
+    trades: list[dict] = []
 
     for row in rows:
         typ = (row.get("type") or "").strip()
@@ -104,6 +109,7 @@ def compute_daily(rows: list[dict]):
             proceeds = amount + fee         # gross, positive; sell fee netted
             rec = daily[date]
             rec["r"] += proceeds - cost_removed   # realized P&L, net of fees
+            trades.append({"d": date, "p": round(proceeds - cost_removed, 2)})
             rec["f"] += fee
             rec["t"] += tax                 # capital-gains tax withheld (<=0)
             rec["n"] += 1
@@ -166,6 +172,7 @@ def compute_daily(rows: list[dict]):
         "min_date": all_dates[0] if all_dates else None,
         "max_date": all_dates[-1] if all_dates else None,
         "n_days": len(daily_records),
+        "trades": trades,
     }
     return daily_records, flows, meta
 

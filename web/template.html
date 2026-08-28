@@ -49,6 +49,7 @@
     <div class="chart-body collapse-body" id="eq"></div>
   </section>
 
+  <section class="months-row">
   <section class="chart-wrap collapsible" data-collapse="months">
     <div class="chart-head collapse-toggle">
       <span class="c-title">Month by month · <b>net P&amp;L</b></span>
@@ -59,6 +60,21 @@
       </span>
     </div>
     <div class="chart-body collapse-body" id="mo"></div>
+  </section>
+
+  <section class="chart-wrap collapsible" data-collapse="mowl">
+    <div class="chart-head collapse-toggle">
+      <span class="c-title">Avg win / <b>avg loss</b></span>
+      <span class="c-right">
+        <span class="seg" id="mowl-mode" data-stop>
+          <button class="seg-btn active" data-mode="trade">per trade</button><button class="seg-btn" data-mode="day">per day</button>
+        </span>
+        <span class="c-val" id="mowl-ratio"></span>
+        <span class="chevron">▾</span>
+      </span>
+    </div>
+    <div class="chart-body collapse-body" id="mowl"></div>
+  </section>
   </section>
 
   <section class="analytics">

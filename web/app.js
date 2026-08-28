@@ -2,6 +2,7 @@ const PAYLOAD = /*__DATA__*/;
 const DAYS = PAYLOAD.days;
 const FLOWS = PAYLOAD.flows || [];
 const META = PAYLOAD.meta;
+const TRADES = META.trades || [];        // one {d,p} per closed sell (FIFO, net of fees)
 const byDate = Object.fromEntries(DAYS.map(d => [d.d, d]));
 
 /* all-time running P&L up to and including each active day (built once) */
@@ -466,6 +467,112 @@ function renderMonthly(s,e){
   });
 }
 
+/* ---------- avg win / avg loss by month ---------- */
+let MOWL_MODE="trade";                     // "trade" = per closed sell, "day" = per trading day
+function monthlyWinLoss(s,e,mode){
+  const src = mode==="day" ? DAYS.map(d=>({d:d.d,p:d.p})) : TRADES;
+  const ms=monthlyStats(s,e);
+  return ms.map(m=>{
+    const first=iso(m.y,m.m,1), last=iso(m.y,m.m,daysInMonth(m.y,m.m));
+    const lo=first>s?first:s, hi=last<e?last:e;
+    const W=[], L=[];
+    for(const t of src){ if(t.d<lo||t.d>hi) continue; if(t.p>0.005) W.push(t.p); else if(t.p<-0.005) L.push(t.p); }
+    const sum=x=>x.reduce((a,c)=>a+c,0);
+    const avgWin=W.length?sum(W)/W.length:0, avgLoss=L.length?sum(L)/L.length:0;
+    const winRate=(W.length+L.length)?W.length/(W.length+L.length):0;
+    return {...m, nW:W.length, nL:L.length, avgWin, avgLoss, winRate,
+            ratio: avgLoss?Math.abs(avgWin/avgLoss):0,
+            needRatio:(winRate>0&&winRate<1)?(1-winRate)/winRate:0,
+            expectancy:(W.length+L.length)?(sum(W)+sum(L))/(W.length+L.length):0};
+  });
+}
+function renderMonthlyWL(s,e){
+  const host=document.getElementById("mowl"), ratioEl=document.getElementById("mowl-ratio");
+  const unit = MOWL_MODE==="day" ? "day" : "trade";
+  const ms=monthlyWinLoss(s,e,MOWL_MODE), act=ms.filter(x=>x.nW+x.nL>0);
+  if(!act.length){
+    host.innerHTML=`<div class="empty-state" style="padding:34px">No closed ${unit}s in the selected range.</div>`;
+    ratioEl.textContent=""; return;
+  }
+  const latest=act[act.length-1];
+  ratioEl.innerHTML=`${latest.ratio.toFixed(2)}× <span class="c-dd">· ${latest.label}</span>`;
+  ratioEl.className="c-val "+(latest.ratio>=latest.needRatio?"pos":"neg");
+
+  let mx=Math.max(1,...act.map(x=>x.avgWin)), mn=Math.min(-1,...act.map(x=>x.avgLoss));
+  const pad=Math.max((mx-mn)*0.18, 1); mx+=pad; mn-=pad;
+
+  const VBW=600, VBH=224, PT=20, PB=40, SLOT_MAX=112;
+  const n=ms.length, plotH=VBH-PT-PB;
+  const slot=Math.min((VBW-16)/n, SLOT_MAX);
+  const PL=(VBW-slot*n)/2;
+  const bw=Math.max(6, Math.min(slot*0.28, 20)), gap=Math.min(4, bw*0.3);
+  const Y=v=>PT+(mx-v)/(mx-mn)*plotH, zeroY=Y(0);
+  const labelAll=slot>=52, everyOther=slot<34;
+
+  let marks="";
+  ms.forEach((d,i)=>{
+    const cx=PL+(i+0.5)*slot;
+    if(d.nW+d.nL===0){
+      marks+=`<rect class="bar" data-i="${i}" x="${(cx-bw).toFixed(1)}" y="${(zeroY-1).toFixed(1)}" width="${(bw*2).toFixed(1)}" height="2" rx="1" fill="var(--border-strong)"/>`;
+    } else {
+      const xw=cx-gap/2-bw, xl=cx+gap/2;
+      const hw=Math.max(zeroY-Y(d.avgWin),2), hl=Math.max(Y(d.avgLoss)-zeroY,2);
+      marks+=`<path class="bar" data-i="${i}" d="${barPath(xw,zeroY-hw,bw,hw,true)}" fill="var(--pos)"/>`;
+      marks+=`<path class="bar" data-i="${i}" d="${barPath(xl,zeroY,bw,hl,false)}" fill="var(--neg)"/>`;
+      if(labelAll){
+        marks+=`<text x="${cx.toFixed(1)}" y="${(zeroY-hw-7).toFixed(1)}" text-anchor="middle" font-size="11.5" font-weight="650" `+
+               `fill="${d.ratio>=d.needRatio?"var(--pos-text)":"var(--neg-text)"}">${d.ratio.toFixed(2)}×</text>`;
+      }
+    }
+    if(!everyOther || i%2===0 || d.m===0){
+      marks+=`<text x="${cx.toFixed(1)}" y="${VBH-20}" text-anchor="middle" font-size="12" font-weight="600" `+
+             `fill="${d.nW+d.nL?"var(--text-2)":"var(--muted)"}">${d.label}${d.partial?"*":""}</text>`;
+      if(d.m===0 || i===0)
+        marks+=`<text x="${cx.toFixed(1)}" y="${VBH-6}" text-anchor="middle" font-size="10.5" fill="var(--muted)">${d.y}</text>`;
+    }
+    marks+=`<rect class="hit" data-i="${i}" x="${(cx-slot/2).toFixed(1)}" y="0" width="${slot.toFixed(1)}" height="${VBH-PB+6}" fill="transparent"/>`;
+  });
+
+  host.innerHTML=`
+    <svg viewBox="0 0 ${VBW} ${VBH}" role="img" aria-label="Average win and average loss by month">
+      <line x1="${PL.toFixed(1)}" y1="${zeroY.toFixed(1)}" x2="${(VBW-PL).toFixed(1)}" y2="${zeroY.toFixed(1)}" stroke="var(--border-strong)" stroke-width="1"/>
+      ${marks}
+    </svg>
+    <div class="axis"><span>avg win ▲ · avg loss ▼ · payoff ratio above each pair, green when it beats break-even</span></div>`;
+
+  const svg=host.querySelector("svg"), tip=document.getElementById("eq-tip");
+  svg.querySelectorAll(".hit").forEach(hit=>{
+    hit.addEventListener("mousemove", ev=>{
+      const d=ms[Number(hit.dataset.i)];
+      svg.classList.add("hovering");
+      svg.querySelectorAll(".bar").forEach(b=>b.classList.toggle("on", b.dataset.i===hit.dataset.i));
+      tip.querySelector(".d").textContent=d.full+(d.partial?" · partial":"");
+      const v=tip.querySelector(".v");
+      if(d.nW+d.nL){
+        v.innerHTML=`<span class="pos">${eur(d.avgWin)}</span> <span class="c-dd">/</span> <span class="neg">${eur(d.avgLoss)}</span>`; v.className="v";
+        tip.querySelector(".s").textContent=
+          `${d.ratio.toFixed(2)}× payoff (need ${d.needRatio.toFixed(2)}×) · ${Math.round(d.winRate*100)}% win · `+
+          `${d.nW}W / ${d.nL}L ${unit}s · expectancy ${eur(d.expectancy)}/${unit}`;
+      } else { v.textContent="no activity"; v.className="v flat"; tip.querySelector(".s").textContent=""; }
+      let x=ev.clientX+14, y=ev.clientY+14; const tr=tip.getBoundingClientRect();
+      if(x+tr.width>window.innerWidth-8) x=ev.clientX-tr.width-14;
+      if(y+tr.height>window.innerHeight-8) y=ev.clientY-tr.height-14;
+      tip.style.left=x+"px"; tip.style.top=y+"px"; tip.classList.add("show");
+    });
+  });
+  svg.addEventListener("mouseleave", ()=>{
+    tip.classList.remove("show"); svg.classList.remove("hovering");
+    svg.querySelectorAll(".bar.on").forEach(b=>b.classList.remove("on"));
+  });
+}
+document.getElementById("mowl-mode").addEventListener("click", ev=>{
+  ev.stopPropagation();                                   // don't collapse the panel
+  const b=ev.target.closest(".seg-btn"); if(!b) return;
+  MOWL_MODE=b.dataset.mode;
+  document.querySelectorAll("#mowl-mode .seg-btn").forEach(x=>x.classList.toggle("active", x===b));
+  renderMonthlyWL(startEl.value||META.min_date, endEl.value||META.max_date);
+});
+
 /* ---------- analytics: win/loss profile ---------- */
 function winLoss(s,e){
   const a=DAYS.filter(d=>d.d>=s&&d.d<=e);
@@ -612,7 +719,7 @@ function clampToData(v){ return v<META.min_date?META.min_date : v>META.max_date?
 function refresh(){
   let s=startEl.value||META.min_date, e=endEl.value||META.max_date;
   if(s>e){ [s,e]=[e,s]; startEl.value=s; endEl.value=e; }
-  renderSummary(s,e); renderEquity(s,e); renderMonthly(s,e); renderProfile(s,e);
+  renderSummary(s,e); renderEquity(s,e); renderMonthly(s,e); renderMonthlyWL(s,e); renderProfile(s,e);
   renderWeekday(s,e); renderRolling(s,e); renderCalendar(s,e); markPreset();
 }
 function setRange(s,e){ startEl.value=clampToData(s); endEl.value=clampToData(e); CAL_VIEW=null; refresh(); }   // jump to the latest month of the new range

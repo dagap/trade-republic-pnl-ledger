@@ -133,6 +133,7 @@ def test_build_payload_totals():
     assert meta["deposits"] == 500.0
     assert meta["net_deposited"] == 500.0
     assert meta["n_txns"] == 3
+    assert meta["trades"] == [{"d": "2026-06-01", "p": 50.0}]
 
 
 def test_fifo_lot_matching():

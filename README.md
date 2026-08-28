@@ -45,6 +45,10 @@ own trading habits impossible to ignore.
   trading days, win rate and trade count behind it. Months are clipped to the
   selected range (marked with a `*`), so the bars always add up to the period
   total.
+- **Avg win / avg loss by month** — sits beside the month bars: average win
+  and average loss per month (per closed trade, or per trading day), with the
+  payoff ratio above each pair so you can see whether losses are shrinking
+  month over month.
 - **Win/loss profile** — average win vs. average loss, payoff ratio, and the
   payoff you'd need to break even at your win rate. (Turns out a good win rate
   doesn't save you if your losers are twice your winners.)

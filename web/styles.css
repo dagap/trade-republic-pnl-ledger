@@ -195,6 +195,19 @@
   .chart-head .c-dd b{font-weight:720; font-variant-numeric:tabular-nums}
   .chart-head .c-right{margin-left:auto; display:flex; gap:18px; align-items:baseline}
 
+  /* ---------- month row: net P&L bars + avg win/loss ---------- */
+  .months-row{display:grid; grid-template-columns:3fr 2fr; gap:14px}
+  .months-row>.chart-wrap{min-width:0}
+  .months-row .c-title, .months-row .c-val{white-space:nowrap}
+  @media(max-width:900px){ .months-row{grid-template-columns:1fr} }
+  .seg{display:inline-flex; white-space:nowrap; border:1px solid var(--border); border-radius:7px; overflow:hidden}
+  .seg-btn{background:transparent; border:0; color:var(--muted); font:inherit; font-size:11px; font-weight:600;
+    padding:3px 8px; cursor:pointer; text-transform:uppercase; letter-spacing:.02em}
+  .seg-btn.active{background:var(--surface-2); color:var(--text)}
+  #mowl .bar{transition:opacity .08s}
+  #mowl svg.hovering .bar{opacity:.45}
+  #mowl svg.hovering .bar.on{opacity:1}
+
   /* ---------- analytics panels ---------- */
   .analytics{display:grid; grid-template-columns:1fr 1fr; gap:14px}
   @media(max-width:780px){ .analytics{grid-template-columns:1fr} }
