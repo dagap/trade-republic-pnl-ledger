@@ -11,6 +11,9 @@ dashboard.html
 # Local editor/agent tooling (kept out of the published repo)
 .claude/
 
+# macOS
+.DS_Store
+
 # Real trading data — never commit personal account exports.
 # The bundled sample (data/demo.csv) is the only CSV that should be tracked.
 data/*.csv
