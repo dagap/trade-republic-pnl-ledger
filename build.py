@@ -61,9 +61,14 @@ def main() -> None:
     print(f"Days with activity: {meta['n_days']}  "
           f"({meta['min_date']} -> {meta['max_date']})")
     print(f"All-time net P&L: {meta['total_pnl']:+,.2f} EUR")
+    print(f"Funding: {meta['deposits']:+,.2f} in, {meta['withdrawals']:+,.2f} out, "
+          f"net {meta['net_deposited']:+,.2f} EUR")
     if meta["missing_basis"]:
         print(f"Note: {meta['missing_basis']} sell(s) had no prior cost basis "
               "in the data (treated as zero cost).")
+    if meta["unknown_types"]:
+        listing = ", ".join(f"{t} ({n})" for t, n in meta["unknown_types"].items())
+        print(f"Warning: unrecognised transaction type(s) excluded: {listing}")
     print(f"Wrote {OUT_FILE}")
 
 

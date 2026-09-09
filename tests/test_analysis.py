@@ -84,6 +84,36 @@ def test_income_counted_and_transfers_ignored():
     assert sum(f["wd"] for f in flows) == -400.0
 
 
+def test_non_instant_transfers_count_as_funding():
+    # Trade Republic settles the same cash movement as TRANSFER_* or
+    # TRANSFER_INSTANT_* depending on the rail; both are real funding flows.
+    rows = [
+        row(date="2026-04-01", type="TRANSFER_INBOUND", amount="300"),
+        row(date="2026-04-02", type="TRANSFER_INSTANT_INBOUND", amount="700"),
+        row(date="2026-04-03", type="TRANSFER_OUTBOUND", amount="-500.17"),
+        row(date="2026-04-04", type="TRANSFER_INSTANT_OUTBOUND", amount="-100"),
+    ]
+    payload = build_payload(rows)
+    meta = payload["meta"]
+    assert meta["deposits"] == 1000.0
+    assert meta["withdrawals"] == -600.17
+    assert meta["net_deposited"] == 399.83
+    assert meta["unknown_types"] == {}     # every row was modelled
+
+
+def test_unrecognised_types_are_reported_not_dropped():
+    rows = [
+        row(date="2026-04-01", type="TRANSFER_INSTANT_INBOUND", amount="100"),
+        row(date="2026-04-02", type="CARD_PAYMENT", amount="-25"),
+        row(date="2026-04-03", type="CARD_PAYMENT", amount="-30"),
+        row(date="2026-04-04", type="SAVEBACK", amount="-15"),
+    ]
+    _days, _flows, meta = compute_daily(rows)
+    # unmodelled rows stay out of the figures, but are counted so the dashboard
+    # can show the gap instead of quietly reporting a wrong total
+    assert meta["unknown_types"] == {"CARD_PAYMENT": 2, "SAVEBACK": 1}
+
+
 def test_missing_cost_basis_is_flagged():
     # A sell with no prior buy (position opened before the data window).
     rows = [row(date="2026-05-01", type="SELL", symbol="Q", shares="-10", amount="100")]

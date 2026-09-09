@@ -22,8 +22,12 @@ TRADE_BUY = "BUY"
 TRADE_SELL = "SELL"
 INCOME_TYPES = {"DIVIDEND", "INTEREST_PAYMENT"}
 TAX_OPTIMIZATION = "TAX_OPTIMIZATION"   # tax refund from loss offsetting
-TRANSFER_IN = "TRANSFER_INSTANT_INBOUND"    # cash deposit
-TRANSFER_OUT = "TRANSFER_INSTANT_OUTBOUND"  # cash withdrawal
+# Trade Republic labels the same cash movement differently depending on the rail
+# it settled over — an instant SEPA payment and an ordinary one arrive as
+# TRANSFER_INSTANT_* and TRANSFER_*. Match the whole family, or a plain SEPA
+# withdrawal silently vanishes from the funding totals.
+TRANSFER_IN_TYPES = {"TRANSFER_INSTANT_INBOUND", "TRANSFER_INBOUND"}    # deposits
+TRANSFER_OUT_TYPES = {"TRANSFER_INSTANT_OUTBOUND", "TRANSFER_OUTBOUND"}  # withdrawals
 # Transfers are cash movements, not P&L — tracked separately as funding flows.
 
 
@@ -52,6 +56,7 @@ def compute_daily(rows: list[dict]):
     positions: dict[str, list[list[float]]] = {}
     daily = defaultdict(lambda: {"r": 0.0, "i": 0.0, "f": 0.0, "t": 0.0, "n": 0})
     flows_by_date = defaultdict(lambda: {"dep": 0.0, "wd": 0.0})
+    unknown_types: dict[str, int] = defaultdict(int)
     missing_basis = 0
 
     for row in rows:
@@ -112,14 +117,20 @@ def compute_daily(rows: list[dict]):
             rec = daily[date]
             rec["t"] += tax                 # tax refund from loss offsetting (>=0)
 
-        elif typ == TRANSFER_IN:
+        elif typ in TRANSFER_IN_TYPES:
             flows_by_date[date]["dep"] += amount    # deposit (>=0)
 
-        elif typ == TRANSFER_OUT:
+        elif typ in TRANSFER_OUT_TYPES:
             flows_by_date[date]["wd"] += amount     # withdrawal (<=0)
 
         # Transfers are tracked as funding flows only — they create no P&L day
         # record, so a pure transfer day never shows as a P&L cell.
+
+        else:
+            # A type we don't model. Counting it here means a new Trade Republic
+            # transaction type surfaces in the dashboard footer instead of being
+            # dropped without a trace, the way a plain TRANSFER_OUTBOUND once was.
+            unknown_types[typ or "(blank)"] += 1
 
     daily_records = []
     for date in sorted(daily):
@@ -148,6 +159,10 @@ def compute_daily(rows: list[dict]):
     all_dates = sorted({d["d"] for d in daily_records} | {f["d"] for f in flows})
     meta = {
         "missing_basis": missing_basis,
+        # sorted most-frequent-first so the loudest omission reads first
+        "unknown_types": dict(
+            sorted(unknown_types.items(), key=lambda kv: (-kv[1], kv[0]))
+        ),
         "min_date": all_dates[0] if all_dates else None,
         "max_date": all_dates[-1] if all_dates else None,
         "n_days": len(daily_records),

@@ -677,9 +677,17 @@ themeBtn.addEventListener("click", ()=>{
   const note = META.missing_basis
     ? ` · ${META.missing_basis} sell(s) had no prior cost basis in the data (treated as zero cost)`
     : "";
+  // Unmodelled transaction types are called out rather than dropped silently, so
+  // a new Trade Republic type shows up as a visible gap instead of a wrong total.
+  const unknown = Object.entries(META.unknown_types || {});
+  const unknownNote = unknown.length
+    ? `<br><b class="neg">Unrecognised transaction type${unknown.length===1?"":"s"} excluded from all figures:</b> `+
+      unknown.map(([t,n])=>`<code>${t}</code> (${n})`).join(", ")+"."
+    : "";
   document.getElementById("footer").innerHTML =
     `Realized P&amp;L via FIFO lot matching per instrument (German tax method), net of trading fees · dividends &amp; interest as income · capital-gains tax withheld and tax-optimisation refunds both included · cash transfers excluded${note}.<br>`+
-    `Regenerate with <code>python build.py</code> after updating <code>data/*.csv</code>.`;
+    `Regenerate with <code>python build.py</code> after updating <code>data/*.csv</code>.`+
+    unknownNote;
   startEl.min=endEl.min=META.min_date; startEl.max=endEl.max=META.max_date;
   startEl.value=META.min_date; endEl.value=META.max_date;
   renderStats();
