@@ -138,6 +138,8 @@ function cellColor(p, scale){
 
 /* ---------- calendar ---------- */
 let CAL_VIEW=null;   // {y,m} of the month currently shown; null = latest month of the range
+let CAL_MODE="month";   // "month" = one month of days · "year" = one year of months
+try{ if(localStorage.getItem("pnl-cal-mode")==="year") CAL_MODE="year"; }catch(e){}
 function monthIdx(y,m){ return y*12+m; }
 function calBounds(s,e){ const ps=parse(s), pe=parse(e); return {lo:monthIdx(ps.y,ps.m), hi:monthIdx(pe.y,pe.m)}; }
 // Month navigation redraws only the calendar. Going through refresh() would
@@ -150,11 +152,52 @@ function calRedraw(focusId){
   const b=focusId && document.getElementById(focusId);
   if(b && !b.disabled) b.focus({preventScroll:true});
 }
-function calStep(n){ const v=CAL_VIEW||{}; const i=monthIdx(v.y,v.m)+n; CAL_VIEW={y:Math.floor(i/12), m:((i%12)+12)%12}; calRedraw(n<0?"cal-prev":"cal-next"); }
+function calStep(n){
+  const v=CAL_VIEW||{};
+  if(CAL_MODE==="year"){ CAL_VIEW={y:v.y+n, m:v.m}; }
+  else { const i=monthIdx(v.y,v.m)+n; CAL_VIEW={y:Math.floor(i/12), m:((i%12)+12)%12}; }
+  calRedraw(n<0?"cal-prev":"cal-next");
+}
 function calToday(){ const t=parse(todayISO()); CAL_VIEW={y:t.y,m:t.m}; calRedraw("cal-today"); }
+function calSetMode(mode){
+  if(mode===CAL_MODE) return;
+  CAL_MODE=mode;
+  try{ localStorage.setItem("pnl-cal-mode",mode); }catch(e){}
+  calRedraw();
+}
+/* shared header: ‹ title › Today · Month|Year · period total */
+function calHeader(o){
+  const unit=CAL_MODE==="year"?"year":"month";
+  return `<div class="month-head">
+      <div class="cal-nav">
+        <button class="cal-btn" id="cal-prev" aria-label="Previous ${unit}" ${o.atLo?"disabled":""}>&#8249;</button>
+        <div class="m-name">${o.title}</div>
+        <button class="cal-btn" id="cal-next" aria-label="Next ${unit}" ${o.atHi?"disabled":""}>&#8250;</button>
+        <button class="cal-btn cal-today" id="cal-today" ${o.todayIn?"":"disabled"}>Today</button>
+      </div>
+      <div class="m-right">
+        <span class="seg cal-mode" id="cal-mode" role="group" aria-label="Calendar view">
+          <button class="seg-btn${CAL_MODE==="month"?" active":""}" data-mode="month">Month</button><button class="seg-btn${CAL_MODE==="year"?" active":""}" data-mode="year">Year</button>
+        </span>
+        <div class="m-total ${cls(o.total)}">${eur(o.total)}</div>
+      </div>
+    </div>`;
+}
 function renderCalendar(s,e){
   const cal=document.getElementById("cal");
   CUM_RANGE=buildCumRange(s,e);
+  cal.innerHTML = CAL_MODE==="year" ? yearHTML(s,e) : monthHTML(s,e);
+  document.getElementById("cal-prev").addEventListener("click", ()=>calStep(-1));
+  document.getElementById("cal-next").addEventListener("click", ()=>calStep(1));
+  document.getElementById("cal-today").addEventListener("click", calToday);
+  document.getElementById("cal-mode").addEventListener("click", ev=>{
+    const b=ev.target.closest(".seg-btn"); if(b) calSetMode(b.dataset.mode);
+  });
+  attachTips();
+}
+
+/* one month of days */
+function monthHTML(s,e){
   const scale=buildScale(s,e);
   const today=todayISO();
   const {lo,hi}=calBounds(s,e);
@@ -163,111 +206,192 @@ function renderCalendar(s,e){
   vi=Math.max(lo,Math.min(hi,vi));
   const y=Math.floor(vi/12), m=vi%12;
   CAL_VIEW={y,m};
-  let html="";
-  {
-    const m0=iso(y,m,1), m1=iso(y,m,daysInMonth(y,m));
-    const mAgg=agg(m0<s?s:m0, m1>e?e:m1);   // clipped like the cells and margins below, so the card agrees with itself
-    const ti=parse(today), todayIn = monthIdx(ti.y,ti.m)>=lo && monthIdx(ti.y,ti.m)<=hi;
-    html+=`<div class="month">
-      <div class="month-head">
-        <div class="cal-nav">
-          <button class="cal-btn" id="cal-prev" aria-label="Previous month" ${vi<=lo?"disabled":""}>&#8249;</button>
-          <div class="m-name">${MONTHS[m]} <span>${y}</span></div>
-          <button class="cal-btn" id="cal-next" aria-label="Next month" ${vi>=hi?"disabled":""}>&#8250;</button>
-          <button class="cal-btn cal-today" id="cal-today" ${todayIn?"":"disabled"}>Today</button>
-        </div>
-        <div class="m-total ${cls(mAgg.net)}">${eur(mAgg.net)}</div>
-      </div>
-      <div class="weekdays">${WD.map(w=>`<div>${w}</div>`).join("")}<div class="wk-head">Week</div></div>
+  const m0=iso(y,m,1), m1=iso(y,m,daysInMonth(y,m));
+  const mAgg=agg(m0<s?s:m0, m1>e?e:m1);   // clipped like the cells and margins below, so the card agrees with itself
+  const ti=parse(today), todayIn = monthIdx(ti.y,ti.m)>=lo && monthIdx(ti.y,ti.m)<=hi;
+  let html=`<div class="month">`+
+    calHeader({title:`${MONTHS[m]} <span>${y}</span>`, atLo:vi<=lo, atHi:vi>=hi, todayIn, total:mAgg.net})+
+    `<div class="weekdays">${WD.map(w=>`<div>${w}</div>`).join("")}<div class="wk-head">Week</div></div>
       <div class="grid">`;
-    const lead=weekdayIdx(y,m,1);
-    const dim=daysInMonth(y,m);
-    let col=0, wkSum=0, wkHas=false;
-    const colSum=Array(7).fill(0), colHas=Array(7).fill(false);   // per-weekday column totals (bottom margin)
-    const flushWeek=()=>{
-      html+=`<div class="wcell"><div class="wk-l">Week</div>`+
-        (wkHas?`<div class="wk-a ${cls(wkSum)}">${eurCompact(wkSum)}</div>`
-              :`<div class="wk-a flat">—</div>`)+`</div>`;
-      wkSum=0; wkHas=false;
-    };
-    for(let i=0;i<lead;i++){ html+=`<div class="cell blank"></div>`; col++; }
-    for(let day=1;day<=dim;day++){
-      const ds=iso(y,m,day);
-      const wknd=[0,6].includes(weekdayIdx(y,m,day));
-      const inRange = ds>=s && ds<=e;
-      const rec=byDate[ds];
-      const isToday = ds===today ? " today":"";
-      const wk = wknd?" weekend":"";
-      if(!inRange){
-        html+=`<div class="cell empty out${wk}"><div class="daynum">${day}</div></div>`;
-      } else if(rec && Math.abs(rec.p)>=0.005){
-        const c=cellColor(rec.p, scale);
-        html+=`<div class="cell has${wk}${isToday}" data-d="${ds}"
-                 style="background:${c.bg}">
-                 <div class="daynum" ${c.strong?'style="color:rgba(255,255,255,.85)"':''}>${day}</div>
-                 <div><div class="amt" style="color:${c.text}">${eurCompact(rec.p)}</div>
-                 ${rec.n?`<div class="tcount" ${c.strong?'style="color:rgba(255,255,255,.75)"':''}>${rec.n} trade${rec.n===1?"":"s"}</div>`:""}</div>
-               </div>`;
-      } else if(rec){ // activity but net ~0
-        html+=`<div class="cell has empty${wk}${isToday}" data-d="${ds}">
-                 <div class="daynum">${day}</div>
-                 <div><div class="amt flat">€0</div><div class="tcount">${rec.n} trade${rec.n===1?"":"s"}</div></div></div>`;
-      } else {
-        html+=`<div class="cell empty${wk}${isToday}"><div class="daynum">${day}</div></div>`;
-      }
-      if(inRange && rec){ wkSum+=rec.p; wkHas=true;
-        const ci=weekdayIdx(y,m,day); colSum[ci]+=rec.p; colHas[ci]=true; }
-      col++;
-      if(col===7){ flushWeek(); col=0; }
+  const lead=weekdayIdx(y,m,1);
+  const dim=daysInMonth(y,m);
+  let col=0, wkSum=0, wkHas=false;
+  const colSum=Array(7).fill(0), colHas=Array(7).fill(false);   // per-weekday column totals (bottom margin)
+  const flushWeek=()=>{
+    html+=`<div class="wcell"><div class="wk-l">Week</div>`+
+      (wkHas?`<div class="wk-a ${cls(wkSum)}">${eurCompact(wkSum)}</div>`
+            :`<div class="wk-a flat">—</div>`)+`</div>`;
+    wkSum=0; wkHas=false;
+  };
+  for(let i=0;i<lead;i++){ html+=`<div class="cell blank"></div>`; col++; }
+  for(let day=1;day<=dim;day++){
+    const ds=iso(y,m,day);
+    const wknd=[0,6].includes(weekdayIdx(y,m,day));
+    const inRange = ds>=s && ds<=e;
+    const rec=byDate[ds];
+    const isToday = ds===today ? " today":"";
+    const wk = wknd?" weekend":"";
+    if(!inRange){
+      html+=`<div class="cell empty out${wk}"><div class="daynum">${day}</div></div>`;
+    } else if(rec && Math.abs(rec.p)>=0.005){
+      const c=cellColor(rec.p, scale);
+      html+=`<div class="cell has${wk}${isToday}" data-d="${ds}"
+               style="background:${c.bg}">
+               <div class="daynum" ${c.strong?'style="color:rgba(255,255,255,.85)"':''}>${day}</div>
+               <div><div class="amt" style="color:${c.text}">${eurCompact(rec.p)}</div>
+               ${rec.n?`<div class="tcount" ${c.strong?'style="color:rgba(255,255,255,.75)"':''}>${rec.n} trade${rec.n===1?"":"s"}</div>`:""}</div>
+             </div>`;
+    } else if(rec){ // activity but net ~0
+      html+=`<div class="cell has empty${wk}${isToday}" data-d="${ds}">
+               <div class="daynum">${day}</div>
+               <div><div class="amt flat">€0</div><div class="tcount">${rec.n} trade${rec.n===1?"":"s"}</div></div></div>`;
+    } else {
+      html+=`<div class="cell empty${wk}${isToday}"><div class="daynum">${day}</div></div>`;
     }
-    if(col>0){ while(col<7){ html+=`<div class="cell blank"></div>`; col++; } flushWeek(); }
-    // bottom margin: per-weekday column totals + corner grand total (reconciles to month net)
-    for(let ci=0;ci<7;ci++){
-      const wknd=[0,6].includes(ci);
-      html+=`<div class="dcell${wknd?" weekend":""}"><div class="dc-l">${WD[ci]}</div>`+
-        (colHas[ci]?`<div class="dc-a ${cls(colSum[ci])}">${eurCompact(colSum[ci])}</div>`
-                   :`<div class="dc-a flat">—</div>`)+`</div>`;
-    }
-    const gTot=colSum.reduce((a,b)=>a+b,0), gHas=colHas.some(Boolean);   // reconciles with both margins under any filter
-    html+=`<div class="corner ${cls(gTot)}"><div class="cn-l">Total</div>`+
-      (gHas?`<div class="cn-a">${eurCompact(gTot)}</div>`:`<div class="cn-a flat">—</div>`)+`</div>`;
-    html+=`</div></div>`;
+    if(inRange && rec){ wkSum+=rec.p; wkHas=true;
+      const ci=weekdayIdx(y,m,day); colSum[ci]+=rec.p; colHas[ci]=true; }
+    col++;
+    if(col===7){ flushWeek(); col=0; }
   }
-  cal.innerHTML = html;
-  document.getElementById("cal-prev").addEventListener("click", ()=>calStep(-1));
-  document.getElementById("cal-next").addEventListener("click", ()=>calStep(1));
-  document.getElementById("cal-today").addEventListener("click", calToday);
-  attachTips();
+  if(col>0){ while(col<7){ html+=`<div class="cell blank"></div>`; col++; } flushWeek(); }
+  // bottom margin: per-weekday column totals + corner grand total (reconciles to month net)
+  for(let ci=0;ci<7;ci++){
+    const wknd=[0,6].includes(ci);
+    html+=`<div class="dcell${wknd?" weekend":""}"><div class="dc-l">${WD[ci]}</div>`+
+      (colHas[ci]?`<div class="dc-a ${cls(colSum[ci])}">${eurCompact(colSum[ci])}</div>`
+                 :`<div class="dc-a flat">—</div>`)+`</div>`;
+  }
+  const gTot=colSum.reduce((a,b)=>a+b,0), gHas=colHas.some(Boolean);   // reconciles with both margins under any filter
+  html+=`<div class="corner ${cls(gTot)}"><div class="cn-l">Total</div>`+
+    (gHas?`<div class="cn-a">${eurCompact(gTot)}</div>`:`<div class="cn-a flat">—</div>`)+`</div>`;
+  return html+`</div></div>`;
+}
+
+/* one year of months: a quarter per row, quarter totals in the right margin,
+   best / worst / up-down / year total along the bottom — the same shape as the
+   month view, so the eye already knows where to look. */
+function yearHTML(s,e){
+  const today=todayISO(), ti=parse(today);
+  const yLo=parse(s).y, yHi=parse(e).y;
+  let y = CAL_VIEW ? CAL_VIEW.y : yHi;
+  y=Math.max(yLo,Math.min(yHi,y));
+  CAL_VIEW={y, m:CAL_VIEW?CAL_VIEW.m:11};
+  // months clipped to the range, so cells, margins and the header total all agree
+  const stats={}; for(const x of monthlyStats(s,e)) stats[monthIdx(x.y,x.m)]=x;
+  // colour scale over every month in the range (not just this year) so stepping
+  // between years keeps the same meaning of "deep green"
+  const mags=Object.values(stats).filter(x=>x.days>0&&Math.abs(x.net)>0.005).map(x=>Math.abs(x.net)).sort((a,b)=>a-b);
+  const scale=Math.max(mags.length?mags[Math.min(mags.length-1,Math.floor(mags.length*0.90))]:1, 1);
+  const y0=iso(y,0,1), y1=iso(y,11,31);
+  const yAgg=agg(y0<s?s:y0, y1>e?e:y1);
+  let html=`<div class="month">`+
+    calHeader({title:`${y}`, atLo:y<=yLo, atHi:y>=yHi, todayIn:ti.y>=yLo&&ti.y<=yHi, total:yAgg.net})+
+    `<div class="weekdays ygrid-head"><div></div><div></div><div></div><div class="wk-head">Quarter</div></div>
+      <div class="grid ygrid">`;
+  let best=null, worst=null, up=0, dn=0, anyPartial=false;
+  for(let q=0;q<4;q++){
+    let qSum=0, qHas=false;
+    for(let m=q*3;m<q*3+3;m++){
+      const st=stats[monthIdx(y,m)];
+      const isNow = y===ti.y && m===ti.m ? " today":"";
+      if(!st){
+        html+=`<div class="cell mcell empty out"><div class="daynum">${MONTHS[m]}</div></div>`;
+        continue;
+      }
+      const star=st.partial?"<sup>*</sup>":""; if(st.partial) anyPartial=true;
+      if(st.days>0){
+        qSum+=st.net; qHas=true;
+        if(best===null||st.net>best.net) best=st;
+        if(worst===null||st.net<worst.net) worst=st;
+        if(st.net>0.005) up++; else if(st.net<-0.005) dn++;
+      }
+      const sub=`${st.trades} trade${st.trades===1?"":"s"} · ${st.days} day${st.days===1?"":"s"}`;
+      if(st.days>0 && Math.abs(st.net)>=0.005){
+        const c=cellColor(st.net, scale);
+        html+=`<div class="cell has mcell${isNow}" data-m="${y}-${m}" style="background:${c.bg}">
+                 <div class="daynum" ${c.strong?'style="color:rgba(255,255,255,.85)"':''}>${MONTHS[m]}${star}</div>
+                 <div><div class="amt" style="color:${c.text}">${eurCompact(st.net)}</div>
+                 <div class="tcount" ${c.strong?'style="color:rgba(255,255,255,.75)"':''}>${sub}</div></div>
+               </div>`;
+      } else if(st.days>0){ // activity but net ~0
+        html+=`<div class="cell has mcell empty${isNow}" data-m="${y}-${m}">
+                 <div class="daynum">${MONTHS[m]}${star}</div>
+                 <div><div class="amt flat">€0</div><div class="tcount">${sub}</div></div></div>`;
+      } else {
+        html+=`<div class="cell mcell empty${isNow}"><div class="daynum">${MONTHS[m]}${star}</div></div>`;
+      }
+    }
+    html+=`<div class="wcell"><div class="wk-l">Q${q+1}</div>`+
+      (qHas?`<div class="wk-a ${cls(qSum)}">${eurCompact(qSum)}</div>`:`<div class="wk-a flat">—</div>`)+`</div>`;
+  }
+  // bottom margin
+  const mo=x=>`${x.label}${x.partial?"*":""} · ${eurCompact(x.net)}`;
+  html+=`<div class="dcell"><div class="dc-l">Best month</div>`+
+    (best?`<div class="dc-a ${cls(best.net)}">${mo(best)}</div>`:`<div class="dc-a flat">—</div>`)+`</div>`;
+  html+=`<div class="dcell"><div class="dc-l">Worst month</div>`+
+    (worst?`<div class="dc-a ${cls(worst.net)}">${mo(worst)}</div>`:`<div class="dc-a flat">—</div>`)+`</div>`;
+  html+=`<div class="dcell"><div class="dc-l">Months</div>`+
+    (up+dn?`<div class="dc-a"><span class="pos">${up} up</span> <span class="flat">·</span> <span class="neg">${dn} down</span></div>`
+          :`<div class="dc-a flat">—</div>`)+`</div>`;
+  const gHas=best!==null;   // any traded month in the year
+  html+=`<div class="corner ${cls(yAgg.net)}"><div class="cn-l">Total</div>`+
+    (gHas?`<div class="cn-a">${eurCompact(yAgg.net)}</div>`:`<div class="cn-a flat">—</div>`)+`</div>`;
+  html+=`</div>`;
+  if(anyPartial) html+=`<div class="cal-note">* month clipped by the selected date range</div>`;
+  return html+`</div>`;
 }
 
 /* ---------- tooltip ---------- */
 const tip=document.getElementById("tip");
+function placeTip(ev){
+  const pad=14; let x=ev.clientX+pad, y=ev.clientY+pad;
+  const r=tip.getBoundingClientRect();
+  if(x+r.width>window.innerWidth-8) x=ev.clientX-r.width-pad;
+  if(y+r.height>window.innerHeight-8) y=ev.clientY-r.height-pad;
+  tip.style.left=x+"px"; tip.style.top=y+"px"; tip.classList.add("show");
+}
+function setTipRow(k, text, colour){
+  const el=tip.querySelector(`[data-k="${k}"]`);
+  el.textContent=text; el.className = colour===undefined ? "" : cls(colour);
+}
+function fillTipBreakdown(a){   // shared rows: day record and month aggregate use the same keys
+  setTipRow("r",eur(a.r)); setTipRow("i",eur(a.i)); setTipRow("f",eur(a.f)); setTipRow("t",eur(a.t));
+  setTipRow("n",String(a.n));
+  const net=tip.querySelector(".t-net"); net.textContent=eur(a.p); net.className="t-net "+cls(a.p);
+  // the all-time row only adds information when the period starts after the first day
+  document.getElementById("t-cum-all").style.display =
+    (startEl.value||META.min_date)>META.min_date ? "" : "none";
+}
 function attachTips(){
-  document.querySelectorAll(".cell.has").forEach(c=>{
+  document.querySelectorAll(".cell.has[data-d]").forEach(c=>{
     c.addEventListener("mousemove", ev=>{
       const rec=byDate[c.dataset.d]; if(!rec) return;
       const p=parse(rec.d);
+      tip.classList.remove("mo");
       tip.querySelector(".t-date").textContent =
         new Date(p.y,p.m,p.d).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
-      const net=tip.querySelector(".t-net");
-      net.textContent=eur(rec.p); net.className="t-net "+cls(rec.p);
-      tip.querySelector('[data-k="r"]').textContent=eur(rec.r);
-      tip.querySelector('[data-k="i"]').textContent=eur(rec.i);
-      tip.querySelector('[data-k="f"]').textContent=eur(rec.f);
-      tip.querySelector('[data-k="t"]').textContent=eur(rec.t);
-      tip.querySelector('[data-k="n"]').textContent=rec.n;
-      const cr=tip.querySelector('[data-k="cr"]'), ca=tip.querySelector('[data-k="ca"]');
-      const vr=CUM_RANGE[rec.d]||0, va=CUM_ALL[rec.d]||0;
-      cr.textContent=eur(vr); cr.className=cls(vr);
-      ca.textContent=eur(va); ca.className=cls(va);
-      // the all-time row only adds information when the period starts after the first day
-      document.getElementById("t-cum-all").style.display =
-        (startEl.value||META.min_date)>META.min_date ? "" : "none";
-      const pad=14; let x=ev.clientX+pad, y=ev.clientY+pad;
-      const r=tip.getBoundingClientRect();
-      if(x+r.width>window.innerWidth-8) x=ev.clientX-r.width-pad;
-      if(y+r.height>window.innerHeight-8) y=ev.clientY-r.height-pad;
-      tip.style.left=x+"px"; tip.style.top=y+"px"; tip.classList.add("show");
+      fillTipBreakdown(rec);
+      setTipRow("cr",eur(CUM_RANGE[rec.d]||0),CUM_RANGE[rec.d]||0);
+      setTipRow("ca",eur(CUM_ALL[rec.d]||0),CUM_ALL[rec.d]||0);
+      placeTip(ev);
+    });
+    c.addEventListener("mouseleave", ()=>tip.classList.remove("show"));
+  });
+  document.querySelectorAll(".cell.has[data-m]").forEach(c=>{
+    c.addEventListener("mousemove", ev=>{
+      const [y,m]=c.dataset.m.split("-").map(Number);
+      let s=startEl.value||META.min_date, e=endEl.value||META.max_date; if(s>e) [s,e]=[e,s];
+      const first=iso(y,m,1), last=iso(y,m,daysInMonth(y,m));
+      const ms=first>s?first:s, me=last<e?last:e;   // clipped, same as the cell
+      const a=agg(ms,me);
+      tip.classList.add("mo");
+      tip.querySelector(".t-date").textContent = `${MONTHS[m]} ${y}`+(ms>first||me<last?" · clipped to range":"");
+      fillTipBreakdown({p:a.net, r:a.realized, i:a.income, f:a.fees, t:a.tax, n:a.trades});
+      setTipRow("days",`${a.days} · ${a.win}W / ${a.loss}L`);
+      setTipRow("wr",(a.win+a.loss)?Math.round(a.winRate*100)+"%":"—");
+      const cr=agg(s,me).net, ca=agg(META.min_date,me).net;   // running totals through the end of the month
+      setTipRow("cr",eur(cr),cr); setTipRow("ca",eur(ca),ca);
+      placeTip(ev);
     });
     c.addEventListener("mouseleave", ()=>tip.classList.remove("show"));
   });
