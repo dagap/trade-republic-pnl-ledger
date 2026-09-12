@@ -172,10 +172,15 @@
   .cal-mode .seg-btn{padding:6px 11px; font-size:11px}
   @media(max-width:600px){ .month-head{flex-wrap:wrap; gap:10px} .month-head .m-right{margin-left:auto} }
 
-  /* year view: 3 months per row (a quarter), quarter total in the right margin */
-  .ygrid, .ygrid-head{grid-template-columns:repeat(3,1fr) minmax(76px,.92fr)}
+  /* year view: 4 months per row (3 rows), then a Q1–Q4 row and the summary row,
+     each one cell per column so the quarters line up under the months */
+  .ygrid{grid-template-columns:repeat(4,1fr)}
   .cell.mcell{min-height:92px; padding:11px 13px}
-  .ygrid .wcell{min-height:92px}
+  .ygrid .dcell,.ygrid .corner{margin-top:0; align-items:center}
+  .ygrid .qcell{margin-top:6px}
+  .ygrid .dcell .dc-l{font-size:9.5px}
+  .ygrid .qcell .dc-a{font-size:14px; font-weight:760}
+  @media(max-width:600px){ .ygrid{grid-template-columns:repeat(2,1fr)} .ygrid .qcell:nth-child(n+15){margin-top:0} }
   .cell.mcell .daynum{font-size:12px; font-weight:640; letter-spacing:.01em}
   .cell.mcell .daynum sup{font-size:9px; line-height:0; margin-left:1px}
   .cell.mcell .amt{font-size:18px; font-weight:720}

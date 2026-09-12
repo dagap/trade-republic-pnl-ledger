@@ -267,9 +267,9 @@ function monthHTML(s,e){
   return html+`</div></div>`;
 }
 
-/* one year of months: a quarter per row, quarter totals in the right margin,
-   best / worst / up-down / year total along the bottom — the same shape as the
-   month view, so the eye already knows where to look. */
+/* one year of months: four per row (three rows), then a Q1–Q4 quarter row and
+   best / worst / up-down / year total along the bottom — the same margin idea as
+   the month view, so the eye already knows where to look. */
 function yearHTML(s,e){
   const today=todayISO(), ti=parse(today);
   const yLo=parse(s).y, yHi=parse(e).y;
@@ -286,45 +286,45 @@ function yearHTML(s,e){
   const yAgg=agg(y0<s?s:y0, y1>e?e:y1);
   let html=`<div class="month">`+
     calHeader({title:`${y}`, atLo:y<=yLo, atHi:y>=yHi, todayIn:ti.y>=yLo&&ti.y<=yHi, total:yAgg.net})+
-    `<div class="weekdays ygrid-head"><div></div><div></div><div></div><div class="wk-head">Quarter</div></div>
-      <div class="grid ygrid">`;
+    `<div class="grid ygrid">`;
   let best=null, worst=null, up=0, dn=0, anyPartial=false;
-  for(let q=0;q<4;q++){
-    let qSum=0, qHas=false;
-    for(let m=q*3;m<q*3+3;m++){
-      const st=stats[monthIdx(y,m)];
-      const isNow = y===ti.y && m===ti.m ? " today":"";
-      if(!st){
-        html+=`<div class="cell mcell empty out"><div class="daynum">${MONTHS[m]}</div></div>`;
-        continue;
-      }
-      const star=st.partial?"<sup>*</sup>":""; if(st.partial) anyPartial=true;
-      if(st.days>0){
-        qSum+=st.net; qHas=true;
-        if(best===null||st.net>best.net) best=st;
-        if(worst===null||st.net<worst.net) worst=st;
-        if(st.net>0.005) up++; else if(st.net<-0.005) dn++;
-      }
-      const sub=`${st.trades} trade${st.trades===1?"":"s"} · ${st.days} day${st.days===1?"":"s"}`;
-      if(st.days>0 && Math.abs(st.net)>=0.005){
-        const c=cellColor(st.net, scale);
-        html+=`<div class="cell has mcell${isNow}" data-m="${y}-${m}" style="background:${c.bg}">
-                 <div class="daynum" ${c.strong?'style="color:rgba(255,255,255,.85)"':''}>${MONTHS[m]}${star}</div>
-                 <div><div class="amt" style="color:${c.text}">${eurCompact(st.net)}</div>
-                 <div class="tcount" ${c.strong?'style="color:rgba(255,255,255,.75)"':''}>${sub}</div></div>
-               </div>`;
-      } else if(st.days>0){ // activity but net ~0
-        html+=`<div class="cell has mcell empty${isNow}" data-m="${y}-${m}">
-                 <div class="daynum">${MONTHS[m]}${star}</div>
-                 <div><div class="amt flat">€0</div><div class="tcount">${sub}</div></div></div>`;
-      } else {
-        html+=`<div class="cell mcell empty${isNow}"><div class="daynum">${MONTHS[m]}${star}</div></div>`;
-      }
+  const qSum=[0,0,0,0], qHas=[false,false,false,false];
+  for(let m=0;m<12;m++){
+    const st=stats[monthIdx(y,m)], q=Math.floor(m/3);
+    const isNow = y===ti.y && m===ti.m ? " today":"";
+    if(!st){
+      html+=`<div class="cell mcell empty out"><div class="daynum">${MONTHS[m]}</div></div>`;
+      continue;
     }
-    html+=`<div class="wcell"><div class="wk-l">Q${q+1}</div>`+
-      (qHas?`<div class="wk-a ${cls(qSum)}">${eurCompact(qSum)}</div>`:`<div class="wk-a flat">—</div>`)+`</div>`;
+    const star=st.partial?"<sup>*</sup>":""; if(st.partial) anyPartial=true;
+    if(st.days>0){
+      qSum[q]+=st.net; qHas[q]=true;
+      if(best===null||st.net>best.net) best=st;
+      if(worst===null||st.net<worst.net) worst=st;
+      if(st.net>0.005) up++; else if(st.net<-0.005) dn++;
+    }
+    const sub=`${st.trades} trade${st.trades===1?"":"s"} · ${st.days} day${st.days===1?"":"s"}`;
+    if(st.days>0 && Math.abs(st.net)>=0.005){
+      const c=cellColor(st.net, scale);
+      html+=`<div class="cell has mcell${isNow}" data-m="${y}-${m}" style="background:${c.bg}">
+               <div class="daynum" ${c.strong?'style="color:rgba(255,255,255,.85)"':''}>${MONTHS[m]}${star}</div>
+               <div><div class="amt" style="color:${c.text}">${eurCompact(st.net)}</div>
+               <div class="tcount" ${c.strong?'style="color:rgba(255,255,255,.75)"':''}>${sub}</div></div>
+             </div>`;
+    } else if(st.days>0){ // activity but net ~0
+      html+=`<div class="cell has mcell empty${isNow}" data-m="${y}-${m}">
+               <div class="daynum">${MONTHS[m]}${star}</div>
+               <div><div class="amt flat">€0</div><div class="tcount">${sub}</div></div></div>`;
+    } else {
+      html+=`<div class="cell mcell empty${isNow}"><div class="daynum">${MONTHS[m]}${star}</div></div>`;
+    }
   }
-  // bottom margin
+  // quarter row: one cell per quarter, lined up under the four month columns
+  for(let q=0;q<4;q++){
+    html+=`<div class="dcell qcell"><div class="dc-l">Q${q+1}</div>`+
+      (qHas[q]?`<div class="dc-a ${cls(qSum[q])}">${eurCompact(qSum[q])}</div>`:`<div class="dc-a flat">—</div>`)+`</div>`;
+  }
+  // bottom row: best / worst / up-down / year total
   const mo=x=>`${x.label}${x.partial?"*":""} · ${eurCompact(x.net)}`;
   html+=`<div class="dcell"><div class="dc-l">Best month</div>`+
     (best?`<div class="dc-a ${cls(best.net)}">${mo(best)}</div>`:`<div class="dc-a flat">—</div>`)+`</div>`;

@@ -36,9 +36,9 @@ own trading habits impossible to ignore.
   right margin and per-weekday totals along the bottom.
 - **Yearly view** — flip the calendar to *Year* and the same grid shows twelve
   months instead of days: each month coloured by its net P&L with the trade and
-  day count, quarter totals in the right margin, and best month, worst month,
-  months up/down and the year total along the bottom. Hover a month for the full
-  breakdown plus trading days and win rate. The choice is remembered.
+  day count, four months to a row, with quarter totals and best month, worst
+  month, months up/down and the year total in the rows beneath. Hover a month
+  for the full breakdown plus trading days and win rate. The choice is remembered.
 - **Realized P&L the way the taxman sees it** — sells are matched against buy
   lots first-in-first-out per instrument (the method German tax law mandates)
   and the gain is net of trading fees, so it ties out to what Trade Republic
