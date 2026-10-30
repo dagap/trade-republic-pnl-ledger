@@ -5,6 +5,8 @@ Realized P&L matches sells against buy lots first-in-first-out per instrument
 (the method German tax law mandates, § 20 Abs. 4 S. 7 EStG) and is net of
 trading fees: a buy fee is capitalised into the lot's cost and a sell fee is
 deducted from proceeds, so the realized figure is the one Trade Republic taxes.
+A knocked-out or expired warrant is realized like a sell for its redemption
+payout (often a few cents), so its loss lands on the day it was closed.
 Dividends & interest count as income; capital-gains tax (withheld on sells,
 refunded via "Tax Optimisation") is applied on its day; cash transfers are
 ignored.
@@ -29,6 +31,11 @@ TAX_OPTIMIZATION = "TAX_OPTIMIZATION"   # tax refund from loss offsetting
 TRANSFER_IN_TYPES = {"TRANSFER_INSTANT_INBOUND", "TRANSFER_INBOUND"}    # deposits
 TRANSFER_OUT_TYPES = {"TRANSFER_INSTANT_OUTBOUND", "TRANSFER_OUTBOUND"}  # withdrawals
 # Transfers are cash movements, not P&L — tracked separately as funding flows.
+# A warrant that hits its knock-out barrier (or expires) is closed by the issuer,
+# not sold: WARRANT_EXERCISE removes the shares with no cash, then TILG
+# ("Tilgung", redemption) pays out whatever residual value is left, often cents.
+WARRANT_EXERCISE = "WARRANT_EXERCISE"
+REDEMPTION = "TILG"
 
 
 def _f(v: str) -> float:
@@ -39,11 +46,31 @@ def _f(v: str) -> float:
     return float(v) if v else 0.0
 
 
+def _close_lots(lots: list[list[float]], qty: float) -> tuple[float, float]:
+    """Consume ``qty`` from the front of ``lots`` (FIFO), in place.
+
+    Returns ``(cost_removed, unmatched_qty)`` — ``unmatched_qty`` > 0 means the
+    position was opened before our data window.
+    """
+    remaining = qty
+    cost_removed = 0.0
+    while remaining > 1e-9 and lots:
+        lot = lots[0]
+        take = min(lot[0], remaining)
+        cost_removed += lot[1] * take / lot[0]
+        lot[1] -= lot[1] * take / lot[0]
+        lot[0] -= take
+        remaining -= take
+        if lot[0] <= 1e-9:
+            lots.pop(0)
+    return cost_removed, remaining
+
+
 def compute_daily(rows: list[dict]):
     """Return ``(daily_records, flows, meta)``.
 
-    ``meta["trades"]`` is a list of ``{d, p}`` — one entry per SELL with its
-    realized P&L (FIFO, net of fees) — so the dashboard can profile wins and
+    ``meta["trades"]`` is a list of ``{d, p}`` — one entry per SELL or
+    knocked-out warrant with its realized P&L (FIFO, net of fees) — so the dashboard can profile wins and
     losses per closed trade, not only per day.
 
     ``daily_records`` is a list of ``{d, p, r, i, f, t, n}`` sorted by date:
@@ -63,6 +90,9 @@ def compute_daily(rows: list[dict]):
     unknown_types: dict[str, int] = defaultdict(int)
     missing_basis = 0
     trades: list[dict] = []
+    # symbol -> the trade record of a warrant closed by WARRANT_EXERCISE, awaiting
+    # its TILG redemption payout
+    exercised: dict[str, dict] = {}
 
     for row in rows:
         typ = (row.get("type") or "").strip()
@@ -91,19 +121,8 @@ def compute_daily(rows: list[dict]):
             rec["n"] += 1
 
         elif typ == TRADE_SELL:
-            qty_sold = -shares              # shares negative on a sell
-            lots = positions.get(symbol, [])
-            remaining = qty_sold
-            cost_removed = 0.0
-            while remaining > 1e-9 and lots:
-                lot = lots[0]
-                take = min(lot[0], remaining)
-                cost_removed += lot[1] * take / lot[0]
-                lot[1] -= lot[1] * take / lot[0]
-                lot[0] -= take
-                remaining -= take
-                if lot[0] <= 1e-9:
-                    lots.pop(0)
+            # shares negative on a sell
+            cost_removed, remaining = _close_lots(positions.get(symbol, []), -shares)
             if remaining > 1e-9:
                 missing_basis += 1          # opened before our data window
             proceeds = amount + fee         # gross, positive; sell fee netted
@@ -113,6 +132,31 @@ def compute_daily(rows: list[dict]):
             rec["f"] += fee
             rec["t"] += tax                 # capital-gains tax withheld (<=0)
             rec["n"] += 1
+
+        elif typ == WARRANT_EXERCISE:
+            # Position closed by the issuer: the whole cost is realized as a
+            # loss now; the TILG redemption that follows adds back the residual.
+            cost_removed, remaining = _close_lots(positions.get(symbol, []), -shares)
+            if remaining > 1e-9:
+                missing_basis += 1
+            rec = daily[date]
+            rec["r"] += amount - cost_removed      # amount is blank on a knock-out
+            trade = {"d": date, "p": round(amount - cost_removed, 2)}
+            trades.append(trade)
+            exercised[symbol] = trade
+            rec["n"] += 1
+
+        elif typ == REDEMPTION:
+            rec = daily[date]
+            rec["r"] += amount                     # residual value paid out (>=0)
+            rec["t"] += tax
+            # Fold the payout into the closed trade, so a knock-out reads as one
+            # trade with its true net loss rather than a loss plus a tiny "win".
+            trade = exercised.pop(symbol, None)
+            if trade is not None:
+                trade["p"] = round(trade["p"] + amount, 2)
+            else:
+                trades.append({"d": date, "p": round(amount, 2)})
 
         elif typ in INCOME_TYPES:
             rec = daily[date]

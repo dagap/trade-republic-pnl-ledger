@@ -224,3 +224,33 @@ def test_date_window_includes_transfer_only_days():
     assert meta["min_date"] == "2026-05-17"
     assert meta["max_date"] == "2026-05-20"
     assert meta["deposits"] == 975.0
+
+
+def test_knocked_out_warrant_realizes_the_loss():
+    # Real Trade Republic shape: a knock-out arrives as WARRANT_EXERCISE (shares
+    # removed, no cash) followed by TILG (redemption of the residual value).
+    rows = [
+        row(date="2026-10-13", type="BUY", symbol="W", shares="300", amount="-1164.00", fee="-1.00"),
+        row(date="2026-10-21", type="WARRANT_EXERCISE", symbol="W", shares="-300"),
+        row(date="2026-10-21", type="TILG", symbol="W", amount="0.300000"),
+    ]
+    days, _flows, meta = compute_daily(rows)
+    d = day(days, "2026-10-21")
+    assert d["r"] == -1164.70     # 0.30 redeemed - 1165 cost incl. buy fee
+    assert d["n"] == 1            # one closed position, not two
+    assert meta["unknown_types"] == {}
+    assert meta["missing_basis"] == 0
+    # the expiry is one closed trade carrying the full loss
+    assert meta["trades"] == [{"d": "2026-10-21", "p": -1164.70}]
+
+
+def test_redemption_paid_on_a_later_day():
+    rows = [
+        row(date="2026-10-13", type="BUY", symbol="W", shares="10", amount="-100"),
+        row(date="2026-10-21", type="WARRANT_EXERCISE", symbol="W", shares="-10"),
+        row(date="2026-10-23", type="TILG", symbol="W", amount="2"),
+    ]
+    days, _flows, meta = compute_daily(rows)
+    assert day(days, "2026-10-21")["r"] == -100.0
+    assert day(days, "2026-10-23")["r"] == 2.0
+    assert meta["trades"] == [{"d": "2026-10-21", "p": -98.0}]
