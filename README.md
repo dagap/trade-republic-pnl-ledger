@@ -32,7 +32,7 @@ own trading habits impossible to ignore.
 - **Daily P&L calendar** — every trading day coloured green/red by size, with the
   amount and trade count in the cell and a full breakdown on hover — including
   the running total up to that day, both within the selected period and
-  all-time. One month at a time with prev/next navigation, a weekly total in the
+  all-time. Click a day to open its day view (below). One month at a time with prev/next navigation, a weekly total in the
   right margin and per-weekday totals along the bottom.
 - **Day view** — click any trading day for a trade-by-trade report: headline
   KPIs (net, win rate, profit factor, best/worst trade, average hold, capital
@@ -40,6 +40,8 @@ own trading habits impossible to ignore.
   exit, net P&L by underlying and by long/short, and the full trade table.
   Positions carried in from an earlier session are flagged as overnight, and
   knock-outs are marked. Step between days with ← / →, close with Esc.
+
+  ![Day view](docs/day-view.png)
 - **Yearly view** — flip the calendar to *Year* and the same grid shows twelve
   months instead of days: each month coloured by its net P&L with the trade and
   day count, four months to a row, with quarter totals and best month, worst
@@ -122,9 +124,16 @@ of the repo.
 The interesting logic lives in [`analysis.py`](analysis.py). A few decisions
 worth calling out:
 
-- **Average-cost matching.** Each instrument tracks running quantity and cost.
-  A sell realizes `proceeds − avg_cost × qty_sold`. This handles positions held
-  across days and partial exits without needing lot-level bookkeeping.
+- **FIFO lot matching.** Each instrument keeps a queue of open buy lots, and a
+  sell consumes the oldest first — the method German tax law mandates (§ 20
+  Abs. 4 S. 7 EStG), so the realized figure ties out to what the broker taxes.
+  The buy fee is part of a lot's cost and the sell fee comes off the proceeds,
+  so realized P&L is net of fees. Positions held across days and partial exits
+  fall out naturally, and each closed trade remembers when its lot was opened —
+  which is how the day view can flag a position carried in overnight.
+- **Knock-outs close a position too.** A warrant that hits its barrier arrives
+  as `WARRANT_EXERCISE` (shares removed, no cash) plus a `TILG` redemption of
+  the residual value; the two are folded into one losing trade.
 - **Tax is a signed cash impact.** On a profitable sell, tax is *withheld*
   (negative). When the broker later refunds it via loss-offsetting
   (`TAX_OPTIMIZATION`, positive), that's added back on the day it lands. Over a
@@ -146,13 +155,14 @@ build.py       orchestrator — assemble web/ + data -> dashboard.html
 web/
   template.html   HTML shell with placeholders
   styles.css      all styling
-  app.js          all behaviour (vanilla JS, SVG charts)
+  app.js          dashboard behaviour (vanilla JS, SVG charts)
+  day.js          the day view opened by clicking a calendar day
 data/demo.csv  bundled sample data
 tests/         pytest suite for the analysis and loader
 ```
 
 The build is a straight line: `load_transactions → build_payload → render`.
-`render` inlines the stylesheet, script, and JSON data into the HTML shell so the
+`render` inlines the stylesheet, scripts, and JSON data into the HTML shell so the
 result is one portable file. `loader` and `analysis` are side-effect free, which
 is what makes them easy to test:
 
@@ -160,6 +170,7 @@ is what makes them easy to test:
 import loader, analysis
 rows = loader.load_transactions("data")
 payload = analysis.build_payload(rows)   # {"days": [...], "flows": [...], "meta": {...}}
+payload["meta"]["trades"]                # one record per closed trade, used by the day view
 ```
 
 ## Development
