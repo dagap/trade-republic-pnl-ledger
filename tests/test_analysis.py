@@ -133,7 +133,7 @@ def test_build_payload_totals():
     assert meta["deposits"] == 500.0
     assert meta["net_deposited"] == 500.0
     assert meta["n_txns"] == 3
-    assert meta["trades"] == [{"d": "2026-06-01", "p": 50.0}]
+    assert [{"d": t["d"], "p": t["p"]} for t in meta["trades"]] == [{"d": "2026-06-01", "p": 50.0}]
 
 
 def test_fifo_lot_matching():
@@ -241,7 +241,7 @@ def test_knocked_out_warrant_realizes_the_loss():
     assert meta["unknown_types"] == {}
     assert meta["missing_basis"] == 0
     # the expiry is one closed trade carrying the full loss
-    assert meta["trades"] == [{"d": "2026-10-21", "p": -1164.70}]
+    assert [{"d": t["d"], "p": t["p"]} for t in meta["trades"]] == [{"d": "2026-10-21", "p": -1164.70}]
 
 
 def test_redemption_paid_on_a_later_day():
@@ -253,4 +253,70 @@ def test_redemption_paid_on_a_later_day():
     days, _flows, meta = compute_daily(rows)
     assert day(days, "2026-10-21")["r"] == -100.0
     assert day(days, "2026-10-23")["r"] == 2.0
-    assert meta["trades"] == [{"d": "2026-10-21", "p": -98.0}]
+    assert [{"d": t["d"], "p": t["p"]} for t in meta["trades"]] == [{"d": "2026-10-21", "p": -98.0}]
+
+
+def test_trade_carries_day_view_detail():
+    # Real Trade Republic shape; the sell's tail of fractional seconds is trimmed.
+    desc = "trade DE000BE27PK5 Turbo auf Gold, quantity: 400"
+    rows = [
+        row(datetime="2026-11-12T13:08:37.796Z", date="2026-11-12", type="BUY",
+            symbol="DE000BE27PK5", name="Short 4.140 $", description="Buy " + desc,
+            shares="400", price="17.56", amount="-7024.00", fee="-1.00"),
+        row(datetime="2026-11-12T13:29:29.426512Z", date="2026-11-12", type="SELL",
+            symbol="DE000BE27PK5", name="Short 4.140 $", description="Sell " + desc,
+            shares="-400", price="19.95", amount="7980.00", fee="-1.00"),
+    ]
+    _days, _flows, meta = compute_daily(rows)
+    (t,) = meta["trades"]
+    assert t["p"] == 954.0                       # 7980 - 7024 - two €1 fees
+    assert t["o"] == "2026-11-12T13:08:37Z"
+    assert t["c"] == "2026-11-12T13:29:29Z"
+    assert (t["u"], t["side"], t["ko"], t["prod"]) == ("Gold", "Short", "4.140 $", "Turbo")
+    assert (t["q"], t["ep"], t["xp"]) == (400, 17.56, 19.95)
+    assert t["cost"] == 7025.0                   # entry cost incl. the buy fee
+    assert t["fee"] == -2.0
+    assert t["how"] == ""
+
+
+def test_trade_opened_on_an_earlier_day_keeps_its_open_time():
+    # FIFO: the sell consumes the older lot, so the trade reads as held overnight.
+    rows = [
+        row(datetime="2026-11-10T15:00:00Z", date="2026-11-10", type="BUY", symbol="N",
+            name="Long 130,4574 $", shares="100", price="2", amount="-200",
+            description="Buy trade N Open End Turbo auf NVIDIA CORP.      DL-,001, quantity: 100"),
+        row(datetime="2026-11-12T09:00:00Z", date="2026-11-12", type="BUY", symbol="N",
+            shares="100", price="3", amount="-300"),
+        row(datetime="2026-11-12T10:00:00Z", date="2026-11-12", type="SELL", symbol="N",
+            shares="-100", price="2.5", amount="250"),
+    ]
+    _days, _flows, meta = compute_daily(rows)
+    (t,) = meta["trades"]
+    assert t["o"] == "2026-11-10T15:00:00Z"
+    assert t["ep"] == 2.0 and t["p"] == 50.0
+    # the instrument comes from the last buy, which had no description: falls back to the ISIN
+    assert t["u"] == "N"
+
+
+def test_underlying_strips_share_class_noise():
+    from analysis import _instrument
+    info = _instrument({"symbol": "X", "name": "Long 130,4574 $", "description":
+                        "Buy trade X Open End Turbo auf NVIDIA CORP.      DL-,001, quantity: 5"})
+    assert info["u"] == "NVIDIA CORP."
+    assert _instrument({"symbol": "X", "name": "Turbo auf Nasdaq-100 Index®", "description":
+                        "Buy trade X Turbo auf Nasdaq-100 Index®, quantity: 5"})["u"] == "Nasdaq-100"
+    # a plain stock: no direction, underlying is the name
+    assert _instrument({"symbol": "US0378331005", "name": "Apple Inc."})["u"] == "Apple Inc."
+
+
+def test_knock_out_trade_records_redemption_price():
+    rows = [
+        row(date="2026-10-13", type="BUY", symbol="W", shares="300", amount="-1164.00", fee="-1.00"),
+        row(date="2026-10-21", type="WARRANT_EXERCISE", symbol="W", shares="-300"),
+        row(date="2026-10-21", type="TILG", symbol="W", amount="0.300000"),
+    ]
+    _days, _flows, meta = compute_daily(rows)
+    (t,) = meta["trades"]
+    assert t["how"] == "ko"
+    assert t["xp"] == 0.001                      # €0.30 over 300 shares
+    assert t["fee"] == -1.0

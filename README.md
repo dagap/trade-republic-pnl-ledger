@@ -34,6 +34,12 @@ own trading habits impossible to ignore.
   the running total up to that day, both within the selected period and
   all-time. One month at a time with prev/next navigation, a weekly total in the
   right margin and per-weekday totals along the bottom.
+- **Day view** — click any trading day for a trade-by-trade report: headline
+  KPIs (net, win rate, profit factor, best/worst trade, average hold, capital
+  deployed), an intraday equity curve, a timeline of every position from entry to
+  exit, net P&L by underlying and by long/short, and the full trade table.
+  Positions carried in from an earlier session are flagged as overnight, and
+  knock-outs are marked. Step between days with ← / →, close with Esc.
 - **Yearly view** — flip the calendar to *Year* and the same grid shows twelve
   months instead of days: each month coloured by its net P&L with the trade and
   day count, four months to a row, with quarter totals and best month, worst

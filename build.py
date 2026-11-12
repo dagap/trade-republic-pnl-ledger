@@ -6,7 +6,7 @@ Thin orchestrator that wires the pieces together:
     loader.load_transactions  ->  analysis.build_payload  ->  web/ template
 
 It reads every ``*.csv`` in ``./data`` and assembles the front-end sources in
-``web/`` (HTML shell + stylesheet + script) with the data baked in, producing a
+``web/`` (HTML shell + stylesheet + scripts) with the data baked in, producing a
 single self-contained ``dashboard.html`` you can open in any browser.
 
     uv run python build.py      # reads ./data/*.csv -> dashboard.html
@@ -42,9 +42,12 @@ def render(payload: dict, web_dir: str) -> str:
     template = _read(os.path.join(web_dir, "template.html"))
     styles = _read(os.path.join(web_dir, "styles.css"))
     app = _read(os.path.join(web_dir, "app.js"))
+    day = _read(os.path.join(web_dir, "day.js"))
     data_json = json.dumps(payload, separators=(",", ":"))
 
-    html = template.replace("/*__STYLES__*/", styles).replace("/*__APP__*/", app)
+    html = (template.replace("/*__STYLES__*/", styles)
+            .replace("/*__APP__*/", app)
+            .replace("/*__DAY__*/", day))
     return html.replace("/*__DATA__*/", data_json)
 
 

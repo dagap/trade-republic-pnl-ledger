@@ -17,6 +17,7 @@ be unit-tested and reused independently of how the data is loaded or rendered.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 
 # Transaction types
@@ -46,32 +47,107 @@ def _f(v: str) -> float:
     return float(v) if v else 0.0
 
 
-def _close_lots(lots: list[list[float]], qty: float) -> tuple[float, float]:
+def _close_lots(lots: list[list], qty: float) -> tuple[float, float, float, str]:
     """Consume ``qty`` from the front of ``lots`` (FIFO), in place.
 
-    Returns ``(cost_removed, unmatched_qty)`` — ``unmatched_qty`` > 0 means the
-    position was opened before our data window.
+    A lot is ``[qty, cost, gross, opened_at]``: ``cost`` includes the buy fee,
+    ``gross`` is shares x price without it, ``opened_at`` the buy's timestamp.
+
+    Returns ``(cost_removed, unmatched_qty, gross_removed, opened_at)`` —
+    ``unmatched_qty`` > 0 means the position was opened before our data window;
+    ``opened_at`` is the timestamp of the oldest lot consumed ("" if none).
     """
     remaining = qty
-    cost_removed = 0.0
+    cost_removed = gross_removed = 0.0
+    opened_at = ""
     while remaining > 1e-9 and lots:
         lot = lots[0]
+        if not opened_at:
+            opened_at = lot[3]
         take = min(lot[0], remaining)
-        cost_removed += lot[1] * take / lot[0]
-        lot[1] -= lot[1] * take / lot[0]
+        share = take / lot[0]
+        cost_removed += lot[1] * share
+        gross_removed += lot[2] * share
+        lot[1] -= lot[1] * share
+        lot[2] -= lot[2] * share
         lot[0] -= take
         remaining -= take
         if lot[0] <= 1e-9:
             lots.pop(0)
-    return cost_removed, remaining
+    return cost_removed, remaining, gross_removed, opened_at
+
+
+_DESC = re.compile(r"^(?:Buy|Sell) trade \S+ (.*?) auf (.+?), quantity")
+_LONG = {"Long", "Call"}
+_SHORT = {"Short", "Put"}
+
+
+def _instrument(row: dict) -> dict:
+    """Describe the instrument a trade row refers to, for the day view.
+
+    Trade Republic's description reads ``Buy trade <ISIN> <product> auf
+    <underlying>, quantity: N`` and a derivative's name ``Long 27.875,3158 $``
+    (direction + knock-out level). Anything that doesn't fit falls back to the
+    name / ISIN, so plain stocks and other brokers' exports still render.
+    """
+    symbol = (row.get("symbol") or "").strip()
+    name = " ".join((row.get("name") or "").split())
+    m = _DESC.match(row.get("description") or "")
+    product, underlying = (m.group(1), m.group(2)) if m else ("", "")
+    # "NVIDIA CORP.      DL-,001" -> "NVIDIA CORP." (share-class junk after a wide gap)
+    underlying = re.split(r"\s{2,}", underlying)[0].replace("Index®", "").replace("®", "").strip()
+    first, _, rest = name.partition(" ")
+    side = "Long" if first in _LONG else "Short" if first in _SHORT else ""
+    return {
+        "s": symbol,
+        "u": underlying or (name if not side else "") or symbol,
+        "side": side,
+        "ko": rest if side else "",
+        "prod": product,
+    }
+
+
+def _ts(row: dict) -> str:
+    """The row's timestamp trimmed to whole seconds (``2026-11-12T07:10:18Z``).
+
+    Exports mix milli- and microsecond precision; seconds parse the same in
+    every browser and are all the day view needs.
+    """
+    dt = (row.get("datetime") or "").strip()
+    return dt[:19] + "Z" if len(dt) >= 19 else dt
+
+
+def _trade(date: str, row: dict, info: dict, qty: float, cost: float,
+           gross: float, opened_at: str, pnl: float, fees: float,
+           exit_price: float, how: str = "") -> dict:
+    """One closed trade: ``d``/``p`` drive the analytics, the rest the day view.
+
+    o/c = opened/closed timestamps, q = quantity closed, cost = entry cost incl.
+    buy fee, ep/xp = entry/exit price per share, fee = all fees on the trade
+    (<=0, already inside ``p``), how = "ko" for a knock-out / expiry.
+    """
+    return {
+        "d": date,
+        "p": round(pnl, 2),
+        "o": opened_at,
+        "c": _ts(row),
+        **info,
+        "q": round(qty, 6),
+        "cost": round(cost, 2),
+        "ep": round(gross / qty, 4) if qty else 0.0,
+        "xp": round(exit_price, 4),
+        "fee": round(fees, 2),
+        "how": how,
+    }
 
 
 def compute_daily(rows: list[dict]):
     """Return ``(daily_records, flows, meta)``.
 
-    ``meta["trades"]`` is a list of ``{d, p}`` — one entry per SELL or
-    knocked-out warrant with its realized P&L (FIFO, net of fees) — so the dashboard can profile wins and
-    losses per closed trade, not only per day.
+    ``meta["trades"]`` is a list of ``{d, p, ...}`` — one entry per SELL or
+    knocked-out warrant with its realized P&L (FIFO, net of fees) — so the
+    dashboard can profile wins and losses per closed trade, not only per day.
+    Each also carries the detail the day view shows (see :func:`_trade`).
 
     ``daily_records`` is a list of ``{d, p, r, i, f, t, n}`` sorted by date:
         d = ISO date, p = net P&L, r = realized trading P&L (FIFO, net of
@@ -82,9 +158,10 @@ def compute_daily(rows: list[dict]):
     ``flows`` is a list of ``{d, dep, wd}`` for dates with cash movements:
         dep = deposits (>=0), wd = withdrawals (<=0).
     """
-    # symbol -> FIFO queue of open lots [qty, cost] (cost = money spent incl.
-    # buy fee, positive). Sells consume from the front.
-    positions: dict[str, list[list[float]]] = {}
+    # symbol -> FIFO queue of open lots [qty, cost, gross, opened_at] (cost =
+    # money spent incl. buy fee, positive). Sells consume from the front.
+    positions: dict[str, list[list]] = {}
+    instruments: dict[str, dict] = {}     # symbol -> _instrument() of its last buy
     daily = defaultdict(lambda: {"r": 0.0, "i": 0.0, "f": 0.0, "t": 0.0, "n": 0})
     flows_by_date = defaultdict(lambda: {"dep": 0.0, "wd": 0.0})
     unknown_types: dict[str, int] = defaultdict(int)
@@ -114,7 +191,8 @@ def compute_daily(rows: list[dict]):
             lots = positions.setdefault(symbol, [])
             # amount negative -> cost positive; the buy fee is an acquisition
             # cost and is realized when this lot is sold.
-            lots.append([shares, -amount - fee])
+            lots.append([shares, -amount - fee, -amount, _ts(row)])
+            instruments[symbol] = _instrument(row)
             rec = daily[date]
             rec["f"] += fee
             rec["t"] += tax
@@ -122,13 +200,17 @@ def compute_daily(rows: list[dict]):
 
         elif typ == TRADE_SELL:
             # shares negative on a sell
-            cost_removed, remaining = _close_lots(positions.get(symbol, []), -shares)
+            cost_removed, remaining, gross, opened_at = _close_lots(
+                positions.get(symbol, []), -shares)
             if remaining > 1e-9:
                 missing_basis += 1          # opened before our data window
             proceeds = amount + fee         # gross, positive; sell fee netted
             rec = daily[date]
             rec["r"] += proceeds - cost_removed   # realized P&L, net of fees
-            trades.append({"d": date, "p": round(proceeds - cost_removed, 2)})
+            trades.append(_trade(
+                date, row, instruments.get(symbol) or _instrument(row), -shares,
+                cost_removed, gross, opened_at, proceeds - cost_removed,
+                fee + gross - cost_removed, _f(row.get("price"))))
             rec["f"] += fee
             rec["t"] += tax                 # capital-gains tax withheld (<=0)
             rec["n"] += 1
@@ -136,12 +218,16 @@ def compute_daily(rows: list[dict]):
         elif typ == WARRANT_EXERCISE:
             # Position closed by the issuer: the whole cost is realized as a
             # loss now; the TILG redemption that follows adds back the residual.
-            cost_removed, remaining = _close_lots(positions.get(symbol, []), -shares)
+            cost_removed, remaining, gross, opened_at = _close_lots(
+                positions.get(symbol, []), -shares)
             if remaining > 1e-9:
                 missing_basis += 1
             rec = daily[date]
             rec["r"] += amount - cost_removed      # amount is blank on a knock-out
-            trade = {"d": date, "p": round(amount - cost_removed, 2)}
+            trade = _trade(
+                date, row, instruments.get(symbol) or _instrument(row), -shares,
+                cost_removed, gross, opened_at, amount - cost_removed,
+                gross - cost_removed, 0.0, how="ko")
             trades.append(trade)
             exercised[symbol] = trade
             rec["n"] += 1
@@ -155,8 +241,12 @@ def compute_daily(rows: list[dict]):
             trade = exercised.pop(symbol, None)
             if trade is not None:
                 trade["p"] = round(trade["p"] + amount, 2)
+                if trade["q"]:
+                    trade["xp"] = round(amount / trade["q"], 4)
             else:
-                trades.append({"d": date, "p": round(amount, 2)})
+                trades.append(_trade(
+                    date, row, instruments.get(symbol) or _instrument(row), 0.0,
+                    0.0, 0.0, "", amount, 0.0, 0.0, how="ko"))
 
         elif typ in INCOME_TYPES:
             rec = daily[date]

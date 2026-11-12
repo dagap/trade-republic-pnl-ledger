@@ -110,6 +110,18 @@
   <footer id="footer"></footer>
 </div>
 
+<div id="dv" class="dv" hidden role="dialog" aria-modal="true" aria-labelledby="dv-title">
+  <div class="dv-panel" tabindex="-1">
+    <div class="dv-bar">
+      <button class="cal-btn" id="dv-prev" aria-label="Previous trading day">&#8249; Prev day</button>
+      <button class="cal-btn" id="dv-next" aria-label="Next trading day">Next day &#8250;</button>
+      <span class="dv-keys">← → to step · Esc to close</span>
+      <button class="cal-btn dv-x" id="dv-close" aria-label="Close day view">&#10005;</button>
+    </div>
+    <div class="dv-body" id="dv-body"></div>
+  </div>
+</div>
+
 <div id="eq-tip"><div class="d"></div><div class="v"></div><div class="s"></div></div>
 
 <div id="tip">
@@ -129,6 +141,9 @@
 
 <script>
 /*__APP__*/
+</script>
+<script>
+/*__DAY__*/
 </script>
 </body>
 </html>
