@@ -1,0 +1,100 @@
+/* ---------- printable day report (A4 portrait) ----------
+   The look of the PDF lives here. The content box is a fixed 182mm wide
+   (A4 minus the page margins) so the SVG charts are drawn at exactly the
+   width they print at. */
+@page{
+  size:A4; margin:16mm 14mm 18mm;
+  @bottom-left{content:"P&L Ledger · Daily trading report"; font:500 7.5pt system-ui,sans-serif; color:#9a988f}
+  @bottom-right{content:"Page " counter(page) " of " counter(pages); font:500 7.5pt system-ui,sans-serif; color:#9a988f}
+}
+:root{
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius:10px;
+  --page:#ffffff; --surface:#ffffff; --surface-2:#f7f6f3; --cell-empty:#f1f0ec;
+  --text:#111110; --text-2:#46453f; --muted:#8c8a82;
+  --border:#e8e6e0; --border-strong:#d3d0c8;
+  --pos:#119c45; --neg:#d23f3f; --pos-text:#0b7d36; --neg-text:#c02f2f;
+  --accent:#111110;
+}
+*{box-sizing:border-box}
+html,body{margin:0; padding:0; background:var(--page)}
+body{font-family:var(--font); color:var(--text); font-size:9pt; line-height:1.45;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact; font-variant-numeric:tabular-nums}
+.pos{color:var(--pos-text)} .neg{color:var(--neg-text)} .flat{color:var(--muted)}
+
+/* block flow (not flex) so the page-break hints below are honoured */
+.rp{width:182mm}
+.rp > * + *{margin-top:14px}
+
+/* masthead */
+.rp-mast{display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; border-bottom:2px solid var(--accent)}
+.rp-brand{display:flex; align-items:center; gap:7px; font-weight:750; font-size:11pt; letter-spacing:-.01em}
+.rp-mark{width:13px; height:13px; border-radius:3px; background:linear-gradient(135deg,var(--pos) 0 50%,var(--neg) 50% 100%)}
+.rp-kind{font-size:7.5pt; font-weight:650; text-transform:uppercase; letter-spacing:.12em; color:var(--muted)}
+
+/* headline */
+.rp-hero{display:flex; justify-content:space-between; align-items:flex-end; gap:20px; padding-top:6px}
+.rp-eyebrow{font-size:7pt; font-weight:650; text-transform:uppercase; letter-spacing:.1em; color:var(--muted)}
+.rp-hero h1{margin:3px 0 0; font-size:21pt; font-weight:760; letter-spacing:-.025em; line-height:1.1}
+.rp-sub{margin:4px 0 0; color:var(--muted); font-size:8.5pt}
+.rp-hero-r{text-align:right; flex:none}
+.rp-net{font-size:30pt; font-weight:780; letter-spacing:-.03em; line-height:1; margin-top:3px}
+.rp-net-after{font-size:8pt; color:var(--muted); margin-top:4px}
+.rp-take{margin:0; font-size:10pt; line-height:1.55; color:var(--text-2); padding:10px 14px;
+  background:var(--surface-2); border-left:3px solid var(--accent); border-radius:0 6px 6px 0}
+.rp-take b{color:var(--text); font-weight:700}
+.rp-take b.pos{color:var(--pos-text)} .rp-take b.neg{color:var(--neg-text)}
+
+/* key figures */
+.rp-kpis{display:grid; grid-template-columns:repeat(3,1fr); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden}
+.rp-kpi{padding:10px 14px; border-right:1px solid var(--border); border-bottom:1px solid var(--border)}
+.rp-kpi:nth-child(3n){border-right:0}
+.rp-kpi:nth-last-child(-n+3){border-bottom:0}
+.rp-kl{font-size:7pt; font-weight:650; text-transform:uppercase; letter-spacing:.08em; color:var(--muted)}
+.rp-kv{font-size:15pt; font-weight:740; letter-spacing:-.02em; margin-top:3px; line-height:1.1}
+.rp-kn{font-size:7.5pt; color:var(--muted); margin-top:3px}
+
+/* sections */
+.rp-sec{break-inside:avoid}
+.rp-sec-table{break-inside:auto}
+.rp-sec-h{break-after:avoid; display:flex; align-items:baseline; gap:10px; margin-bottom:8px; padding-bottom:5px; border-bottom:1px solid var(--border)}
+.rp-sec-h h2, .rp-note h2{margin:0; font-size:7.5pt; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--text)}
+.rp-sec-h p{margin:0; font-size:7.5pt; color:var(--muted)}
+.rp-chart{width:100%}
+.rp-chart svg{display:block; overflow:visible}
+.rp-chart svg text{font-family:var(--font); font-variant-numeric:tabular-nums}
+.rp-grid{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+
+/* horizontal bars (markup from day-core.js) */
+.dv-hbars{display:flex; flex-direction:column; gap:7px}
+.dv-hb{display:grid; grid-template-columns:minmax(0,1.1fr) 1.3fr auto; align-items:center; gap:8px}
+.dv-hb-l{display:flex; flex-direction:column; min-width:0; font-size:8.5pt; color:var(--text-2); font-weight:650}
+.dv-hb-l span:first-child{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.dv-hb-n{font-size:7pt; color:var(--muted); font-weight:500}
+.dv-hb-track{position:relative; height:9px; background:var(--cell-empty); border-radius:3px}
+.dv-hb-track::after{content:""; position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:var(--border-strong)}
+.dv-hb-fill{position:absolute; top:0; bottom:0; border-radius:3px}
+.dv-hb-v{font-size:9pt; font-weight:740; text-align:right; min-width:52px}
+
+/* trade table */
+.rp-table{width:100%; border-collapse:collapse; font-size:7.5pt}
+.rp-table thead{display:table-header-group; break-after:avoid}
+.rp-table th{text-align:left; font-size:6.5pt; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+  padding:0 4px 5px; border-bottom:1px solid var(--border-strong); white-space:nowrap}
+.rp-table td{padding:5px 4px; border-bottom:1px solid var(--border); white-space:nowrap; color:var(--text-2); vertical-align:top}
+.rp-table tbody tr{break-inside:avoid}
+.rp-table tbody tr:nth-child(even) td{background:var(--surface-2)}
+.rp-table tfoot td{border-bottom:0; border-top:1.5px solid var(--accent); padding-top:6px; font-weight:650; color:var(--text)}
+.rp-table .r{text-align:right} .rp-table .n{color:var(--muted); width:14px}
+.rp-table td b{color:inherit; font-weight:720}
+.rp-table td.pos, .rp-table td.neg{color:inherit} .rp-table td.pos{color:var(--pos-text)} .rp-table td.neg{color:var(--neg-text)}
+.rp-isin{font-size:6.5pt; color:var(--muted); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; margin-top:1px}
+.rp-prod{white-space:normal !important; max-width:115px; font-size:7pt}
+.rp-tag{display:inline-block; margin-left:4px; padding:0 4px; border:1px solid var(--border-strong); border-radius:3px;
+  font-size:6pt; font-weight:700; letter-spacing:.04em; color:var(--text-2); vertical-align:1px}
+.rp-tag.neg{color:var(--neg-text); border-color:currentColor}
+
+/* methodology + footer */
+.rp-note{break-inside:avoid; padding-top:4px}
+.rp-note p{margin:5px 0 0; font-size:7.5pt; line-height:1.55; color:var(--muted)}
+.rp-foot{font-size:7pt; color:var(--muted); padding-top:8px; border-top:1px solid var(--border)}

@@ -7,6 +7,7 @@ __pycache__/
 
 # Generated output
 dashboard.html
+reports/
 
 # Local editor/agent tooling (kept out of the published repo)
 .claude/

@@ -42,6 +42,10 @@ own trading habits impossible to ignore.
   knock-outs are marked. Step between days with ← / →, close with Esc.
 
   ![Day view](docs/day-view.png)
+- **PDF day reports** — the day view's *Generate report* button saves a
+  print-ready A4 report of that day to `reports/daily_report_<date>.pdf`
+  (headline result, key figures, both charts, the breakdowns and the trade
+  table), ready to send on. See [Day reports](#day-reports-pdf).
 - **Yearly view** — flip the calendar to *Year* and the same grid shows twelve
   months instead of days: each month coloured by its net P&L with the trade and
   day count, four months to a row, with quarter totals and best month, worst
@@ -73,7 +77,8 @@ own trading habits impossible to ignore.
   light/dark toggle, and collapsible panels — state remembered between visits.
 
 The output is a **single self-contained `dashboard.html`** — no server, no build
-step at view time, no external requests. Open it in any browser.
+step at view time, no external requests. Open it in any browser. (Only saving
+PDF reports needs the tiny local server below.)
 
 ## Quick start
 
@@ -119,6 +124,32 @@ The columns that matter are `date`, `type`, `symbol`, `shares`, `amount`, `fee`,
 Your real data stays local — `.gitignore` keeps every CSV except `demo.csv` out
 of the repo.
 
+## Day reports (PDF)
+
+A static HTML file can't write to disk, so to save reports from the dashboard,
+serve it locally instead of opening `dashboard.html`:
+
+```sh
+uv run python serve.py      # opens http://127.0.0.1:8765 (localhost only)
+```
+
+Click a day, then **Generate report**: the PDF lands in
+`reports/daily_report_<date>.pdf` (the folder is created on first use and is
+git-ignored; generating the same day again overwrites it). The server re-reads
+`data/` on every page load, so a fresh export only needs a browser refresh.
+
+You can also make one straight from the shell:
+
+```sh
+uv run python report.py 2026-11-13
+```
+
+The PDF is printed by a headless **Chrome, Chromium or Edge** already on your
+machine — still no Python dependencies. If it isn't found automatically, point
+`CHROME_PATH` at the browser executable. The report's look lives in
+`web/report.html` / `report.css` / `report.js`; the numbers come from the same
+code as the day view, so the two always agree.
+
 ## How the P&L is calculated
 
 The interesting logic lives in [`analysis.py`](analysis.py). A few decisions
@@ -151,12 +182,17 @@ own:
 ```
 loader.py      data access — find, merge, de-dupe the CSVs
 analysis.py    pure computation — rows -> per-day P&L + funding + meta
-build.py       orchestrator — assemble web/ + data -> dashboard.html
+build.py       orchestrator — assemble web/ + data -> dashboard.html (and report pages)
+report.py      one day -> reports/daily_report_<date>.pdf via headless Chrome
+serve.py       local server: the dashboard + the "Generate report" endpoint
 web/
   template.html   HTML shell with placeholders
   styles.css      all styling
+  core.js         the baked-in data + date / money helpers, shared by every page
   app.js          dashboard behaviour (vanilla JS, SVG charts)
+  day-core.js     one day's numbers and section renderers (day view + report)
   day.js          the day view opened by clicking a calendar day
+  report.html     printable report shell (with report.css / report.js)
 data/demo.csv  bundled sample data
 tests/         pytest suite for the analysis and loader
 ```

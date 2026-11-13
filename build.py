@@ -9,6 +9,9 @@ It reads every ``*.csv`` in ``./data`` and assembles the front-end sources in
 ``web/`` (HTML shell + stylesheet + scripts) with the data baked in, producing a
 single self-contained ``dashboard.html`` you can open in any browser.
 
+``render_report`` assembles the printable one-day page that ``report.py`` turns
+into a PDF.
+
     uv run python build.py      # reads ./data/*.csv -> dashboard.html
 
 Pure standard library. No dependencies.
@@ -33,29 +36,66 @@ def _read(path: str) -> str:
         return fh.read()
 
 
+def _inline(template: str, web_dir: str, styles: str, scripts: dict, data: str) -> str:
+    """Swap each ``/*__NAME__*/`` placeholder for its source file, then the data.
+
+    The data goes in last: ``core.js`` carries the ``/*__DATA__*/`` slot.
+    """
+    html = template.replace("/*__STYLES__*/", _read(os.path.join(web_dir, styles)))
+    for slot, name in scripts.items():
+        html = html.replace(f"/*__{slot}__*/", _read(os.path.join(web_dir, name)))
+    return html.replace("/*__DATA__*/", data)
+
+
 def render(payload: dict, web_dir: str) -> str:
     """Assemble the self-contained dashboard.
 
-    Inlines the stylesheet and script into the HTML shell and bakes the data in
+    Inlines the stylesheet and scripts into the HTML shell and bakes the data in
     as JSON, so the output is one portable file with no external requests.
     """
-    template = _read(os.path.join(web_dir, "template.html"))
-    styles = _read(os.path.join(web_dir, "styles.css"))
-    app = _read(os.path.join(web_dir, "app.js"))
-    day = _read(os.path.join(web_dir, "day.js"))
-    data_json = json.dumps(payload, separators=(",", ":"))
+    return _inline(
+        _read(os.path.join(web_dir, "template.html")), web_dir, "styles.css",
+        {"CORE": "core.js", "APP": "app.js", "DAYCORE": "day-core.js", "DAY": "day.js"},
+        json.dumps(payload, separators=(",", ":")),
+    )
 
-    html = (template.replace("/*__STYLES__*/", styles)
-            .replace("/*__APP__*/", app)
-            .replace("/*__DAY__*/", day))
-    return html.replace("/*__DATA__*/", data_json)
+
+def day_payload(payload: dict, date: str) -> dict:
+    """Cut the payload down to one day: its day record and the trades closed on it."""
+    meta = dict(payload["meta"])
+    meta["trades"] = [t for t in meta.get("trades", []) if t["d"] == date]
+    return {
+        "days": [d for d in payload["days"] if d["d"] == date],
+        "flows": [],
+        "meta": meta,
+    }
+
+
+def render_report(payload: dict, date: str, generated: str, web_dir: str) -> str:
+    """Assemble the printable report page for one day (see ``web/report.html``).
+
+    Only that day's data is baked in. ``generated`` is an ISO timestamp shown in
+    the report footer.
+    """
+    html = _inline(
+        _read(os.path.join(web_dir, "report.html")), web_dir, "report.css",
+        {"CORE": "core.js", "DAYCORE": "day-core.js", "REPORT": "report.js"},
+        json.dumps(day_payload(payload, date), separators=(",", ":")),
+    )
+    report_meta = json.dumps({"date": date, "generated": generated})
+    return html.replace("/*__REPORT_META__*/", report_meta)
+
+
+def load_payload(data_dir: str = DATA_DIR) -> dict:
+    """Read every CSV in ``data_dir`` and return the analysed payload."""
+    payload = build_payload(load_transactions(data_dir))
+    payload["meta"]["n_files"] = len(find_csv_files(data_dir))
+    return payload
 
 
 def main() -> None:
-    rows = load_transactions(DATA_DIR)
-    payload = build_payload(rows)
+    payload = load_payload()
     meta = payload["meta"]
-    meta["n_files"] = len(find_csv_files(DATA_DIR))
 
     with open(OUT_FILE, "w", encoding="utf-8") as fh:
         fh.write(render(payload, WEB_DIR))

@@ -294,9 +294,14 @@
   .dv-bar{position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:8px; padding:12px 16px;
     background:var(--page); border-bottom:1px solid var(--border); border-radius:18px 18px 0 0}
   .dv-bar .cal-btn{font-size:12.5px; font-weight:560; padding:0 12px}
-  .dv-bar .dv-x{margin-left:auto; font-size:14px; padding:0 10px}
+  .dv-bar .dv-x{font-size:14px; padding:0 10px}
+  .dv-bar .dv-report{margin-left:auto; white-space:nowrap}
+  .dv-status{font-size:11.5px; color:var(--muted); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-left:auto; text-align:right}
+  .dv-status:empty{display:none}
+  .dv-status:not(:empty) + .dv-report{margin-left:0}
+  .dv-status.ok{color:var(--pos-text)} .dv-status.err{color:var(--neg-text)}
   .dv-keys{font-size:11.5px; color:var(--muted); margin-left:6px}
-  @media(max-width:600px){ .dv{padding:0} .dv-panel{border-radius:0; border:0; min-height:100%} .dv-bar{top:0; border-radius:0} .dv-keys{display:none} }
+  @media(max-width:600px){ .dv{padding:0} .dv-panel{border-radius:0; border:0; min-height:100%} .dv-bar{top:0; border-radius:0; flex-wrap:wrap} .dv-keys{display:none} .dv-status{order:9; flex-basis:100%; text-align:left} }
   .dv-body{padding:22px 24px 28px; display:flex; flex-direction:column; gap:16px}
   @media(max-width:600px){ .dv-body{padding:18px 16px 24px} }
 
