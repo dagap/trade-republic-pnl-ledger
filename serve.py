@@ -52,12 +52,14 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             length = int(self.headers.get("Content-Length") or 0)
-            date = str(json.loads(self.rfile.read(length) or b"{}").get("date", ""))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            date = str(body.get("date", ""))
+            theme = str(body.get("theme") or "light")
         except (ValueError, AttributeError):
             self._json(400, {"error": "Expected a JSON body like {\"date\": \"YYYY-MM-DD\"}"})
             return
         try:
-            out = report.generate(load_payload(), date)
+            out = report.generate(load_payload(), date, theme=theme)
         except report.ReportError as exc:
             self._json(400, {"error": str(exc)})
             return

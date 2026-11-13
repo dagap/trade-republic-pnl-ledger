@@ -7,6 +7,7 @@ that reuses the day view's numbers and charts. It is assembled by
 Edge already installed on the machine, so there is still no Python dependency.
 
     uv run python report.py 2026-11-12          # one-off, from the shell
+    uv run python report.py 2026-11-12 --theme dark
     uv run python serve.py                      # or the dashboard's day view button
 
 Set ``CHROME_PATH`` if the browser isn't found automatically.
@@ -28,6 +29,7 @@ from build import HERE, WEB_DIR, load_payload, render_report
 
 REPORTS_DIR = os.path.join(HERE, "reports")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+THEMES = ("light", "dark")
 
 _BROWSERS = ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
              "chrome", "msedge", "microsoft-edge")
@@ -105,11 +107,16 @@ def print_to_pdf(html: str, out_path: str, browser: str | None = None,
 
 
 def generate(payload: dict, date: str, reports_dir: str = REPORTS_DIR,
-             browser: str | None = None) -> str:
-    """Write ``reports_dir/daily_report_<date>.pdf`` (overwriting) and return its path."""
+             browser: str | None = None, theme: str = "light") -> str:
+    """Write ``reports_dir/daily_report_<date>.pdf`` (overwriting) and return its path.
+
+    ``theme`` is ``"light"`` (the default) or ``"dark"``.
+    """
     _validate(payload, date)
+    if theme not in THEMES:
+        raise ReportError(f"Unknown theme {theme!r} (expected one of: {', '.join(THEMES)}).")
     generated = dt.datetime.now().astimezone().isoformat(timespec="seconds")
-    html = render_report(payload, date, generated, WEB_DIR)
+    html = render_report(payload, date, generated, WEB_DIR, theme)
     out = os.path.join(reports_dir, report_filename(date))
     print_to_pdf(html, out, browser)
     return out
@@ -118,9 +125,10 @@ def generate(payload: dict, date: str, reports_dir: str = REPORTS_DIR,
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Save one trading day as a PDF report.")
     ap.add_argument("date", help="the trading day, YYYY-MM-DD")
+    ap.add_argument("--theme", choices=THEMES, default="light", help="colour theme (default: light)")
     args = ap.parse_args(argv)
     try:
-        out = generate(load_payload(), args.date)
+        out = generate(load_payload(), args.date, theme=args.theme)
     except ReportError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

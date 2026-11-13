@@ -7,6 +7,7 @@
   const overlay=document.getElementById("dv"), body=document.getElementById("dv-body");
   const btnPrev=document.getElementById("dv-prev"), btnNext=document.getElementById("dv-next");
   const btnReport=document.getElementById("dv-report"), status=document.getElementById("dv-status");
+  const selTheme=document.getElementById("dv-theme");
   const TRADE_DAYS=[...new Set(DAYS.map(d=>d.d))].sort();
   let CUR=null, lastFocus=null;
 
@@ -46,6 +47,12 @@
     status.textContent=text; status.className="dv-status"+(kind?" "+kind:"");
     if(text && kind!=="busy") statusTimer=setTimeout(()=>setStatus(""),kind==="err"?12000:6000);
   }
+  /* PDF theme: light unless this viewer picked dark before (remembered per browser). */
+  try{ if(localStorage.getItem("pnl-report-theme")==="dark") selTheme.value="dark"; }catch(e){}
+  selTheme.addEventListener("change",()=>{
+    try{ localStorage.setItem("pnl-report-theme",selTheme.value); }catch(e){}
+  });
+
   async function generateReport(){
     if(!SERVED){
       setStatus("Reports need the local server: run  uv run python serve.py","err");
@@ -55,7 +62,7 @@
     btnReport.disabled=true; setStatus("Generating PDF…","busy");
     try{
       const res=await fetch("api/report",{method:"POST",headers:{"Content-Type":"application/json"},
-                                          body:JSON.stringify({date})});
+                                          body:JSON.stringify({date,theme:selTheme.value})});
       const out=await res.json().catch(()=>({error:`HTTP ${res.status}`}));
       if(!res.ok) throw new Error(out.error||`HTTP ${res.status}`);
       if(CUR===date) setStatus(`Saved ${out.path}`,"ok");

@@ -16,6 +16,17 @@
   --pos:#119c45; --neg:#d23f3f; --pos-text:#0b7d36; --neg-text:#c02f2f;
   --accent:#111110;
 }
+/* Dark variant, picked with the day view's PDF theme switch (data-theme on <html>).
+   Same palette as the dashboard's dark theme; the page background is painted
+   by @page too so the margins aren't left white. */
+html[data-theme="dark"]{
+  --page:#141416; --surface:#18181a; --surface-2:#1f1f22; --cell-empty:#26262a;
+  --text:#ffffff; --text-2:#c3c2b7; --muted:#8a8a86;
+  --border:#2a2a2d; --border-strong:#3a3a3e;
+  --pos:#0ca30c; --neg:#d03b3b; --pos-text:#3ddc5f; --neg-text:#ff6b6b;
+  --accent:#e8e7e1;
+  color-scheme:dark;
+}
 *{box-sizing:border-box}
 html,body{margin:0; padding:0; background:var(--page)}
 body{font-family:var(--font); color:var(--text); font-size:9pt; line-height:1.45;

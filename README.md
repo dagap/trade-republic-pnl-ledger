@@ -142,7 +142,11 @@ You can also make one straight from the shell:
 
 ```sh
 uv run python report.py 2026-11-13
+uv run python report.py 2026-11-13 --theme dark
 ```
+
+Reports are light by default; pick *Dark PDF* next to the button (or pass
+`--theme dark`) for a dark version. The day view remembers your choice.
 
 The PDF is printed by a headless **Chrome, Chromium or Edge** already on your
 machine — still no Python dependencies. If it isn't found automatically, point

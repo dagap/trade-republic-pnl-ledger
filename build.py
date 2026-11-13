@@ -71,11 +71,12 @@ def day_payload(payload: dict, date: str) -> dict:
     }
 
 
-def render_report(payload: dict, date: str, generated: str, web_dir: str) -> str:
+def render_report(payload: dict, date: str, generated: str, web_dir: str,
+                  theme: str = "light") -> str:
     """Assemble the printable report page for one day (see ``web/report.html``).
 
     Only that day's data is baked in. ``generated`` is an ISO timestamp shown in
-    the report footer.
+    the report footer. ``theme`` is ``"light"`` or ``"dark"`` (see ``report.css``).
     """
     html = _inline(
         _read(os.path.join(web_dir, "report.html")), web_dir, "report.css",
@@ -83,7 +84,8 @@ def render_report(payload: dict, date: str, generated: str, web_dir: str) -> str
         json.dumps(day_payload(payload, date), separators=(",", ":")),
     )
     report_meta = json.dumps({"date": date, "generated": generated})
-    return html.replace("/*__REPORT_META__*/", report_meta)
+    return (html.replace("/*__REPORT_META__*/", report_meta)
+                .replace("/*__THEME__*/", theme))
 
 
 def load_payload(data_dir: str = DATA_DIR) -> dict:
