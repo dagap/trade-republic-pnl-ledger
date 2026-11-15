@@ -80,7 +80,7 @@ def test_closed_trade_row():
     assert r["datetime"] == "2026-11-14T13:15:57Z" and r["date"] == "2026-11-14"
     assert r["pnl"] == 36.02
     assert r["cost"] == round(1906.95 * 0.9, 2)       # KO value converted to EUR
-    assert r["side"] == "Short" and r["ko"] == "2,284.36 USD" and r["how"] == ""
+    assert r["side"] == "Short" and r["ko"] == "2,284.36 $" and r["how"] == ""
 
 
 def test_negative_pnl_and_knock_out_trigger():
@@ -203,3 +203,23 @@ def test_loader_dispatches_and_skips_with_notes(tmp_path):
     assert [(r["broker"], r["transaction_id"]) for r in rows] == [("tr", "tid-1")]
     assert any(n.startswith("capital_transactions.csv:") for n in notes)
     assert any(n.startswith("other.csv:") for n in notes)
+
+
+def test_common_format_csv_keeps_each_rows_broker(tmp_path):
+    (tmp_path / "mixed.csv").write_text(
+        "datetime,date,type,amount,transaction_id,broker\n"
+        "2026-01-01T00:00:00Z,2026-01-01,INTEREST_PAYMENT,1,a-1,tr\n"
+        "2026-01-02T00:00:00Z,2026-01-02,TRANSFER_INBOUND,500,c-1,capital\n"
+        "2026-01-03T00:00:00Z,2026-01-03,INTEREST_PAYMENT,2,x-1,\n", encoding="utf-8")
+    rows, notes = load(str(tmp_path))
+    assert [r["broker"] for r in rows] == ["tr", "capital", "common"] and notes == []
+
+
+def test_bundled_demo_has_both_brokers():
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # read the demo file directly: data/ may also hold real exports
+    from brokers import common
+    demo = common.read(os.path.join(here, "data", "demo.csv"))
+    payload = build_payload(demo, info)
+    assert [b["id"] for b in payload["meta"]["brokers"]] == ["tr", "capital"]
+    assert payload["meta"]["unknown_types"] == {}

@@ -100,7 +100,7 @@ def _instrument(row: dict) -> dict:
     name / ISIN, so plain stocks and other brokers' exports still render.
     """
     symbol = (row.get("symbol") or "").strip()
-    if row.get("underlying") is not None:      # a reader that knows the fields
+    if row.get("underlying"):                  # a reader that knows the fields
         return {"s": symbol, "u": row["underlying"] or symbol, "side": row.get("side", ""),
                 "ko": row.get("ko", ""), "prod": row.get("product", "")}
     name = " ".join((row.get("name") or "").split())

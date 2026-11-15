@@ -379,10 +379,11 @@
   .dv-tw{overflow-x:auto; margin:0 -4px}
   .dv-table{width:100%; border-collapse:collapse; font-size:12.5px; font-variant-numeric:tabular-nums}
   .dv-table th{text-align:left; font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.02em;
-    padding:6px 8px; border-bottom:1px solid var(--border-strong); white-space:nowrap}
-  .dv-table td{padding:7px 8px; border-bottom:1px solid var(--border); white-space:nowrap; color:var(--text-2)}
+    padding:6px 5px; border-bottom:1px solid var(--border-strong); white-space:nowrap}
+  .dv-table td{padding:7px 5px; border-bottom:1px solid var(--border); white-space:nowrap; color:var(--text-2)}
   .dv-table tbody tr:hover td{background:var(--surface-2)}
   .dv-table .r{text-align:right}
+  .dv-table td.wrap{white-space:normal; min-width:72px; max-width:120px; line-height:1.3}
   .dv-table td b{font-weight:700}
   .dv-table .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px}
   .dv-pill{display:inline-block; padding:1px 7px; border-radius:999px; border:1px solid var(--border-strong); font-size:10.5px; font-weight:600; color:var(--text-2)}

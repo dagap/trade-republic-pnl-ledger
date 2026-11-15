@@ -18,9 +18,10 @@ A reader module provides:
 
 from __future__ import annotations
 
-from . import capital, traderepublic
+from . import capital, common, traderepublic
 
-READERS = (traderepublic, capital)
+# Checked in order: the first whose detect() accepts a file reads it.
+READERS = (common, traderepublic, capital)
 
 
 class SkipFile(Exception):

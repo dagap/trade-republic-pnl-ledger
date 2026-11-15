@@ -101,8 +101,9 @@ uv run python build.py      # reads data/* -> dashboard.html
 ```
 
 Then open `dashboard.html`. Out of the box it renders the bundled sample data
-(`data/demo.csv`), so you can see the whole thing working before pointing it at
-anything real.
+(`data/demo.csv`) — a few weeks of trading at two brokers, Trade Republic and
+Capital.com — so you can see the whole thing working, broker switch and tax
+estimate included, before pointing it at anything real.
 
 > Uses [uv](https://docs.astral.sh/uv/). No `uv`? Any Python 3.9+ works:
 > `python build.py`. There are no third-party runtime dependencies.
@@ -221,6 +222,7 @@ own:
 loader.py      data access — find the exports, hand each to its broker reader, merge, de-dupe
 brokers/       one reader per broker -> the common row format
   traderepublic.py   the CSV export for tracking tools
+  common.py          any CSV already in the common format (with a broker column)
   capital.py         the PDF Client Daily Statement
 analysis.py    pure computation — rows -> per-day P&L + funding + meta
 build.py       orchestrator — assemble web/ + data -> dashboard.html (and report pages)
@@ -235,7 +237,7 @@ web/
   day-core.js     one day's numbers and section renderers (day view + report)
   day.js          the day view opened by clicking a calendar day
   report.html     printable report shell (with report.css / report.js)
-data/demo.csv  bundled sample data
+data/demo.csv  bundled sample data (Trade Republic + Capital.com, common format)
 tests/         pytest suite for the analysis, loader and broker readers
 ```
 
@@ -266,6 +268,11 @@ common format — Trade Republic's CSV columns (`datetime`, `date`, `type`,
 reports realized P&L per trade itself, emit `POSITION_OPEN` / `CLOSED_TRADE` rows
 the way `capital.py` does instead of buys and sells. Nothing else changes: the
 broker switch, the by-broker table and the tax estimate pick it up on their own.
+
+For a one-off you can skip the reader: convert the export to the common format
+yourself, add a `broker` column, and drop the CSV into `data/` — `common.py`
+reads any CSV with `broker` and `type` columns as-is. That's how
+`data/demo.csv` holds sample data for both brokers in one file.
 
 ## Development
 

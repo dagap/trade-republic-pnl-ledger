@@ -190,6 +190,7 @@ def _get(row: dict, *names: str) -> str:
 
 
 _SIDE = {"PUT": "Short", "SELL": "Short", "CALL": "Long", "BUY": "Long"}
+_SYMBOL = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥"}   # as Trade Republic names show KO levels
 
 
 def _closed_trade(row: dict, kind: str) -> dict | None:
@@ -220,7 +221,7 @@ def _closed_trade(row: dict, kind: str) -> dict | None:
         "cost": round(cost, 2),
         "underlying": _get(row, "Underlier"),
         "side": _SIDE.get(direction, ""),
-        "ko": f"{ko} {ccy}".strip() if ko and ko != "-" else "",
+        "ko": f"{ko} {_SYMBOL.get(ccy, ccy)}".strip() if ko and ko != "-" else "",
         "product": "KO option" if kind == "KO" else "CFD",
         "how": "ko" if ("KO" in trigger or "KNOCK" in trigger) else "",
         "transaction_id": f"{ID}:{tid}:close:{dt}:{qty}:{_get(row, 'Close price')}",

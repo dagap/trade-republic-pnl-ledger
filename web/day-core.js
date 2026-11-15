@@ -281,10 +281,10 @@ const DV=(()=>{
       return `<tr>
         <td class="flat">${t.n}</td><td>${inn}</td><td>${out}</td>
         <td class="r">${t.o?hold(t.holdMin):"—"}</td>
-        <td>${esc(t.u)}</td>${multi?`<td>${esc(t.b?brokerName(t.b):"—")}</td>`:""}
+        <td class="wrap">${esc(t.u)}</td>${multi?`<td class="wrap">${esc(t.b?brokerName(t.b):"—")}</td>`:""}
         <td>${t.side?`<span class="dv-pill">${t.side} ${arrow(t)}</span>`:"—"}</td>
         <td>${esc(t.prod)||"—"}</td><td>${esc(t.ko)||"—"}</td>
-        <td class="r">${qty(t.q)}</td><td class="r">${num(t.ep)}</td><td class="r">${num(t.xp,t.xp<0.1&&t.xp>0?3:2)}</td>
+        <td class="r">${qty(t.q)}</td><td class="r">${num(t.ep,t.ep>=1000?0:2)}</td><td class="r">${num(t.xp,t.xp>=1000?0:t.xp<0.1&&t.xp>0?3:2)}</td>
         <td class="r">${num(t.cost)}</td>
         <td class="r ${cls(t.p)}"><b>${eur(t.p)}</b></td>
         <td class="r ${cls(t.p)}">${t.cost?(t.ret>0?"+":t.ret<0?MINUS:"")+pct(Math.abs(t.ret*100)):"—"}</td>
