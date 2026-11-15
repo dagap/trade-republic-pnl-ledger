@@ -15,7 +15,8 @@ reports/
 # macOS
 .DS_Store
 
-# Real trading data — never commit personal account exports.
-# The bundled sample (data/demo.csv) is the only CSV that should be tracked.
-data/*.csv
+# Real trading data — never commit personal account exports or statements
+# (CSV, PDF, anything). The bundled sample (data/demo.csv) is the only file
+# in data/ that should be tracked.
+data/*
 !data/demo.csv

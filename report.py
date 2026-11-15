@@ -74,6 +74,20 @@ def _validate(payload: dict, date: str) -> None:
         raise ReportError(f"No closed trades on {date}, so there is nothing to report.")
 
 
+def _clean_view(view: dict | None) -> dict:
+    """Keep only the known view keys, with sane types (it arrives over HTTP)."""
+    view = view if isinstance(view, dict) else {}
+    out: dict = {}
+    if isinstance(view.get("broker"), str):
+        out["broker"] = view["broker"][:40]
+    if isinstance(view.get("estTax"), bool):
+        out["estTax"] = view["estTax"]
+    rate = view.get("rate")
+    if isinstance(rate, (int, float)) and 0 <= rate <= 1:
+        out["rate"] = float(rate)
+    return out
+
+
 def print_to_pdf(html: str, out_path: str, browser: str | None = None,
                  timeout: float = 60) -> None:
     """Render ``html`` with headless Chrome and write it to ``out_path`` as a PDF."""
@@ -107,16 +121,18 @@ def print_to_pdf(html: str, out_path: str, browser: str | None = None,
 
 
 def generate(payload: dict, date: str, reports_dir: str = REPORTS_DIR,
-             browser: str | None = None, theme: str = "light") -> str:
+             browser: str | None = None, theme: str = "light",
+             view: dict | None = None) -> str:
     """Write ``reports_dir/daily_report_<date>.pdf`` (overwriting) and return its path.
 
-    ``theme`` is ``"light"`` (the default) or ``"dark"``.
+    ``theme`` is ``"light"`` (the default) or ``"dark"``. ``view`` carries the
+    dashboard's broker filter and estimated-tax setting (see ``build.render_report``).
     """
     _validate(payload, date)
     if theme not in THEMES:
         raise ReportError(f"Unknown theme {theme!r} (expected one of: {', '.join(THEMES)}).")
     generated = dt.datetime.now().astimezone().isoformat(timespec="seconds")
-    html = render_report(payload, date, generated, WEB_DIR, theme)
+    html = render_report(payload, date, generated, WEB_DIR, theme, _clean_view(view))
     out = os.path.join(reports_dir, report_filename(date))
     print_to_pdf(html, out, browser)
     return out

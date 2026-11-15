@@ -62,7 +62,7 @@
     btnReport.disabled=true; setStatus("Generating PDF…","busy");
     try{
       const res=await fetch("api/report",{method:"POST",headers:{"Content-Type":"application/json"},
-                                          body:JSON.stringify({date,theme:selTheme.value})});
+                                          body:JSON.stringify({date,theme:selTheme.value,view:VIEW})});
       const out=await res.json().catch(()=>({error:`HTTP ${res.status}`}));
       if(!res.ok) throw new Error(out.error||`HTTP ${res.status}`);
       if(CUR===date) setStatus(`Saved ${out.path}`,"ok");

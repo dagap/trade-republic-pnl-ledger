@@ -280,20 +280,20 @@ const DV=(()=>{
       return `<tr>
         <td class="flat">${t.n}</td><td>${inn}</td><td>${out}</td>
         <td class="r">${t.o?hold(t.holdMin):"—"}</td>
-        <td>${esc(t.u)}</td>
+        <td>${esc(t.u)}${BROKERS.length>1&&t.b?`<br><span class="flat">${esc(brokerName(t.b))}</span>`:""}</td>
         <td>${t.side?`<span class="dv-pill">${t.side} ${arrow(t)}</span>`:"—"}</td>
         <td>${esc(t.prod)||"—"}</td><td>${esc(t.ko)||"—"}</td>
         <td class="r">${qty(t.q)}</td><td class="r">${num(t.ep)}</td><td class="r">${num(t.xp,t.xp<0.1&&t.xp>0?3:2)}</td>
         <td class="r">${num(t.cost)}</td>
         <td class="r ${cls(t.p)}"><b>${eur(t.p)}</b></td>
         <td class="r ${cls(t.p)}">${t.cost?(t.ret>0?"+":t.ret<0?MINUS:"")+pct(Math.abs(t.ret*100)):"—"}</td>
-        <td class="flat mono">${esc(t.s)}</td>
+        <td class="flat mono" title="${esc(t.s)}">${esc(t.s.length>14?"…"+t.s.slice(-8):t.s)}</td>
       </tr>`;
     }).join("");
     return `<div class="dv-tw"><table class="dv-table">
       <thead><tr><th>#</th><th>In</th><th>Out</th><th class="r">Hold</th><th>Underlying</th><th>Side</th><th>Product</th>
         <th>KO / strike</th><th class="r">Qty</th><th class="r">Entry</th><th class="r">Exit</th><th class="r">Cost</th>
-        <th class="r">Net</th><th class="r">Return</th><th>ISIN</th></tr></thead>
+        <th class="r">Net</th><th class="r">Return</th><th>ISIN / ID</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   }
 
@@ -305,7 +305,8 @@ const DV=(()=>{
           overnight. Net P&amp;L is the sell proceeds minus the matched entry cost, net of the order fee on both legs; it is
           before capital-gains tax. Return is net P&amp;L divided by the entry cost of the certificate, not the move in the
           underlying. A knocked-out position is closed at its redemption value. Long/short is the product's direction and the
-          KO / strike level is taken from the product name.`;
+          KO / strike level is taken from the product name. Capital.com trades use the realised P&amp;L on Capital.com's
+          statement as-is; their entry cost is the knock-out option's value at entry, converted at the statement's FX rate.`;
 
   return {esc,eur0,hold,dayTrades,summarize,dayTitle,subLine,takeHTML,headerHTML,kpisHTML,
           drawEquity,drawTimeline,barsHTML,tableHTML,card,hideTip,METHOD_NOTE};

@@ -1,11 +1,14 @@
 [project]
 name = "pnl-ledger"
 version = "0.1.0"
-description = "Generate a self-contained P&L calendar dashboard from Trade Republic transaction CSVs."
+description = "Generate a self-contained P&L calendar dashboard from Trade Republic and Capital.com exports."
 readme = "README.md"
 requires-python = ">=3.9"
-# build.py uses only the Python standard library — no runtime dependencies.
-dependencies = []
+# Standard library only, except pdfplumber for Capital.com PDF statements
+# (imported lazily, only when such a statement is in data/).
+dependencies = [
+    "pdfplumber>=0.11.8",
+]
 
 [dependency-groups]
 # Dev tooling: `uv run ruff check .` and `uv run pytest`

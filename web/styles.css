@@ -83,6 +83,37 @@
   .preset:hover{border-color:var(--border-strong); color:var(--text)}
   .preset.active{background:var(--text); color:var(--page); border-color:var(--text)}
 
+  /* ---------- view bar: broker switch + estimated tax ---------- */
+  .viewbar{gap:22px}
+  .seg-lg .seg-btn{padding:7px 12px; font-size:11.5px}
+  .tax-grp{gap:10px; flex-wrap:wrap}
+  .tax-switch{display:flex; align-items:center; gap:7px; cursor:pointer; text-transform:none !important;
+    font-size:13px !important; color:var(--text-2) !important; letter-spacing:0 !important}
+  .tax-switch input{accent-color:var(--text); width:15px; height:15px; margin:0}
+  .rate-wrap{font-size:13px; color:var(--muted)}
+  .rate-wrap input{width:72px; background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+    border-radius:8px; padding:5px 8px; font:inherit; font-size:13px; font-variant-numeric:tabular-nums}
+  .rate-wrap input:focus{outline:none; border-color:var(--border-strong)}
+  .tax-hint{font-size:12px; color:var(--muted)}
+  /* estimated (not yet paid) tax: dashed underline marks it as an estimate, never cash */
+  .est{border-bottom:1px dashed currentColor; padding-bottom:1px}
+  .m-note{font-size:11px; color:var(--muted); font-weight:500}
+
+  /* ---------- by-broker table ---------- */
+  .bk-tw{overflow-x:auto}
+  .bk-table{width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums}
+  .bk-table th{font-size:11px; color:var(--muted); font-weight:560; text-transform:uppercase; letter-spacing:.02em;
+    text-align:right; padding:6px 10px; border-bottom:1px solid var(--border); white-space:nowrap}
+  .bk-table td{text-align:right; padding:9px 10px; border-bottom:1px solid var(--border); white-space:nowrap}
+  .bk-table th:first-child, .bk-table td:first-child{text-align:left; padding-left:0}
+  .bk-table tr.sel td{background:var(--surface-2)}
+  .bk-table tr.total td{border-bottom:0; font-weight:700}
+  .bk-table .bk-name{font-weight:640}
+  .bk-table .bk-sub{display:block; font-size:11px; color:var(--muted); font-weight:500}
+  .bk-table button.bk-pick{background:none; border:0; padding:0; font:inherit; color:inherit; cursor:pointer; text-align:left}
+  .bk-table button.bk-pick:hover .bk-name{text-decoration:underline}
+  .bk-note{font-size:11.5px; color:var(--muted); margin-top:10px; line-height:1.5}
+
   /* ---------- period summary ---------- */
   .summary{
     background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
@@ -276,6 +307,11 @@
   #tip .t-row span:last-child.pos{color:var(--pos-text)}
   #tip .t-row span:last-child.neg{color:var(--neg-text)}
   #tip .t-row span:last-child.flat{color:var(--muted)}
+  #tip .t-x{display:none}
+  #tip.has-x .t-x{display:flex}
+  #tip .t-x em{font-style:normal; font-size:11px; opacity:.85}
+  #tip .t-brokers:empty{display:none}
+  #tip .t-brokers{margin-top:6px; padding-top:6px; border-top:1px solid var(--border)}
   #tip .t-sep{height:1px; background:var(--border); margin:8px 0 7px}
   #tip .t-mo{display:none}            /* month-level rows, shown only when hovering the year view */
   #tip.mo .t-mo{display:flex}

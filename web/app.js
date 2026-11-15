@@ -1,9 +1,11 @@
-/* all-time running P&L up to and including each active day (built once) */
-const CUM_ALL = (() => {
+/* all-time running P&L up to and including each active day (rebuilt when the view changes) */
+let CUM_ALL = {};
+function buildCumAll(){
   const m={}; let c=0;
   for(const d of [...DAYS].sort((a,b)=>a.d<b.d?-1:1)){ c+=d.p; m[d.d]=c; }
-  return m;
-})();
+  CUM_ALL=m;
+}
+buildCumAll();
 /* running P&L within the selected period, rebuilt on every filter change */
 let CUM_RANGE = {};
 function buildCumRange(s,e){
@@ -13,12 +15,12 @@ function buildCumRange(s,e){
 }
 
 /* ---------- aggregation over a date range (inclusive) ---------- */
-function agg(startISO,endISO){
-  const a={net:0,realized:0,income:0,fees:0,tax:0,trades:0,win:0,loss:0,flat:0,
+function agg(startISO,endISO,days=DAYS){
+  const a={net:0,realized:0,income:0,fees:0,tax:0,est:0,trades:0,win:0,loss:0,flat:0,
            best:null,worst:null,days:0};
-  for(const d of DAYS){
+  for(const d of days){
     if(d.d<startISO||d.d>endISO) continue;
-    a.net+=d.p; a.realized+=d.r; a.income+=d.i; a.fees+=d.f; a.tax+=d.t; a.trades+=d.n;
+    a.net+=d.p; a.realized+=d.r; a.income+=d.i; a.fees+=d.f; a.tax+=d.t; a.est+=d.x||0; a.trades+=d.n;
     a.days++;
     if(d.p>0.005) a.win++; else if(d.p<-0.005) a.loss++; else a.flat++;
     if(a.best===null||d.p>a.best.p) a.best=d;
@@ -54,18 +56,25 @@ function renderStats(){
 }
 
 /* ---------- period summary ---------- */
-function aggFlows(s,e){
+function aggFlows(s,e,flows=FLOWS){
   let dep=0, wd=0;
-  for(const f of FLOWS){ if(f.d>=s && f.d<=e){ dep+=f.dep; wd+=f.wd; } }
+  for(const f of flows){ if(f.d>=s && f.d<=e){ dep+=f.dep; wd+=f.wd; } }
   return {dep, wd, net:dep+wd};
 }
 function renderSummary(s,e){
   const a=agg(s,e), fl=aggFlows(s,e);
   const bw = a.best? `${a.best.d.slice(5)} · ${eurCompact(a.best.p)}` : "—";
   const ww = a.worst? `${a.worst.d.slice(5)} · ${eurCompact(a.worst.p)}` : "—";
+  const hasEst=viewHasEstTax();
+  const estMetric = hasEst
+    ? `<div class="metric" title="Capital-gains tax not withheld by the broker, estimated at ${pctRate()} of the year-to-date gain">
+         <div class="m-label">Est. tax owed</div>
+         <div class="m-val ${cls(a.est)}"><span class="est">${eurCompact(a.est)}</span></div>
+         <div class="m-note">${VIEW.estTax?"deducted above":"not deducted"}</div></div>` : "";
+  const scope = VIEW.broker==="all" ? "" : ` · ${brokerName(VIEW.broker)}`;
   document.getElementById("summary").innerHTML=`
     <div class="headline">
-      <div class="label">Net P&amp;L · selected period</div>
+      <div class="label">Net P&amp;L · selected period${scope}${hasEst&&VIEW.estTax?" · after est. tax":""}</div>
       <div class="big ${cls(a.net)}">${eur(a.net)}</div>
       <div class="range-lbl">${s} → ${e}</div>
       <div class="funding">Deposited <b>${eur(fl.dep)}</b> · Withdrawn <b>${eur(fl.wd)}</b> · Net funded <b>${eur(fl.net)}</b></div>
@@ -78,7 +87,8 @@ function renderSummary(s,e){
       <div class="metric"><div class="m-label">Worst day</div><div class="m-val neg">${ww}</div></div>
       <div class="metric"><div class="m-label">Interest</div><div class="m-val ${cls(a.income)}">${eurCompact(a.income)}</div></div>
       <div class="metric"><div class="m-label">Fees</div><div class="m-val neg">${eurCompact(a.fees)}</div></div>
-      <div class="metric"><div class="m-label">Tax net</div><div class="m-val ${cls(a.tax)}">${eurCompact(a.tax)}</div></div>
+      <div class="metric"><div class="m-label">Tax withheld</div><div class="m-val ${cls(a.tax)}">${eurCompact(a.tax)}</div></div>
+      ${estMetric}
       <div class="metric"><div class="m-label">Trades</div><div class="m-val">${a.trades}</div></div>
     </div>`;
 }
@@ -319,8 +329,20 @@ function setTipRow(k, text, colour){
   const el=tip.querySelector(`[data-k="${k}"]`);
   el.textContent=text; el.className = colour===undefined ? "" : cls(colour);
 }
-function fillTipBreakdown(a){   // shared rows: day record and month aggregate use the same keys
+function fillTipBreakdown(a,split){   // shared rows: day record and month aggregate use the same keys
   setTipRow("r",eur(a.r)); setTipRow("i",eur(a.i)); setTipRow("f",eur(a.f)); setTipRow("t",eur(a.t));
+  const hasEst=viewHasEstTax();
+  tip.classList.toggle("has-x", hasEst);
+  if(hasEst){
+    tip.querySelector('[data-k="x"]').innerHTML=`<span class="est">${eur(a.x||0)}</span>`;
+    tip.querySelector('[data-k="x"]').className=cls(a.x||0);
+    setTipRow("xl", VIEW.estTax?"(in net)":"(not in net)");
+  }
+  // per-broker split, when looking at all brokers and more than one traded
+  const sp=(split||[]).filter(r=>Math.abs(r.p)>0.005||r.n);
+  tip.querySelector(".t-brokers").innerHTML = sp.length>1
+    ? sp.map(r=>`<div class="t-row"><span>${brokerName(r.b)}</span><span class="${cls(r.p)}">${eur(r.p)}</span></div>`).join("")
+    : "";
   setTipRow("n",String(a.n));
   const net=tip.querySelector(".t-net"); net.textContent=eur(a.p); net.className="t-net "+cls(a.p);
   // the all-time row only adds information when the period starts after the first day
@@ -335,7 +357,7 @@ function attachTips(){
       tip.classList.remove("mo");
       tip.querySelector(".t-date").textContent =
         new Date(p.y,p.m,p.d).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
-      fillTipBreakdown(rec);
+      fillTipBreakdown(rec, daySplit(rec.d));
       setTipRow("cr",eur(CUM_RANGE[rec.d]||0),CUM_RANGE[rec.d]||0);
       setTipRow("ca",eur(CUM_ALL[rec.d]||0),CUM_ALL[rec.d]||0);
       placeTip(ev);
@@ -351,7 +373,8 @@ function attachTips(){
       const a=agg(ms,me);
       tip.classList.add("mo");
       tip.querySelector(".t-date").textContent = `${MONTHS[m]} ${y}`+(ms>first||me<last?" · clipped to range":"");
-      fillTipBreakdown({p:a.net, r:a.realized, i:a.income, f:a.fees, t:a.tax, n:a.trades});
+      fillTipBreakdown({p:a.net, r:a.realized, i:a.income, f:a.fees, t:a.tax, x:a.est, n:a.trades},
+        rangeSplit(ms,me));
       setTipRow("days",`${a.days} · ${a.win}W / ${a.loss}L`);
       setTipRow("wr",(a.win+a.loss)?Math.round(a.winRate*100)+"%":"—");
       const cr=agg(s,me).net, ca=agg(META.min_date,me).net;   // running totals through the end of the month
@@ -802,13 +825,104 @@ function renderRolling(s,e){
   hit.addEventListener("mouseleave", ()=>{ tip.classList.remove("show"); dot.style.display="none"; cross.style.display="none"; });
 }
 
+/* ---------- brokers: per-broker split, the view bar and the by-broker table ---------- */
+const pctRate=()=>(Math.round(VIEW.rate*100000)/1000)+"%";
+let BROKER_DAYS={};   // id -> that broker's day records under the current view
+function buildBrokerDays(){ BROKER_DAYS={}; for(const b of BROKERS) BROKER_DAYS[b.id]=brokerDays(b.id); }
+buildBrokerDays();
+function daySplit(date){
+  if(VIEW.broker!=="all" || BROKERS.length<2) return [];
+  return BROKERS.map(b=>{ const r=BROKER_DAYS[b.id].find(d=>d.d===date); return {b:b.id, p:r?r.p:0, n:r?r.n:0}; });
+}
+function rangeSplit(s,e){
+  if(VIEW.broker!=="all" || BROKERS.length<2) return [];
+  return BROKERS.map(b=>{ const a=agg(s,e,BROKER_DAYS[b.id]); return {b:b.id, p:a.net, n:a.trades}; });
+}
+function renderBrokers(s,e){
+  const panel=document.getElementById("brokers-panel");
+  panel.hidden = BROKERS.length<2;
+  if(panel.hidden) return;
+  const tot={net:0,realized:0,income:0,fees:0,tax:0,est:0,trades:0,dep:0};
+  const rows=BROKERS.map(b=>{
+    const a=agg(s,e,BROKER_DAYS[b.id]);
+    const fl=aggFlows(s,e,(PAYLOAD.brokers[b.id]||{}).flows||[]);
+    for(const k of ["net","realized","income","fees","tax","est","trades"]) tot[k]+=a[k];
+    tot.dep+=fl.net;
+    const wr=(a.win+a.loss)?Math.round(a.winRate*100)+"%":"—";
+    const est=b.withholds_tax
+      ? `<span class="flat">withheld at source</span>`
+      : `<span class="est ${cls(a.est)}">${eur(a.est)}</span>`;
+    const after=!b.withholds_tax && !VIEW.estTax && Math.abs(a.est)>0.005
+      ? `<span class="bk-sub">${eur(a.net+a.est)} after est. tax</span>` : "";
+    return `<tr class="${VIEW.broker===b.id?"sel":""}">
+      <td><button class="bk-pick" data-b="${b.id}" title="Show only ${b.name}"><span class="bk-name">${b.name}</span>
+        <span class="bk-sub">${b.withholds_tax?"tax withheld by broker":"no tax withheld"}</span></button></td>
+      <td class="${cls(a.net)}"><b>${eur(a.net)}</b>${after}</td>
+      <td>${a.trades}</td><td>${wr} <span class="flat">(${a.win}W/${a.loss}L)</span></td>
+      <td class="${cls(a.realized)}">${eur(a.realized)}</td>
+      <td class="${cls(a.income)}">${eur(a.income)}</td>
+      <td class="neg">${eur(a.fees)}</td>
+      <td class="${cls(a.tax)}">${eur(a.tax)}</td>
+      <td>${est}</td>
+      <td>${eur(fl.net)}</td>
+    </tr>`;
+  }).join("");
+  const anyEst=BROKERS.some(b=>!b.withholds_tax);
+  document.getElementById("brokers").innerHTML=`<div class="bk-tw"><table class="bk-table">
+      <thead><tr><th>Broker</th><th>Net P&amp;L</th><th>Trades</th><th>Win days</th><th>Realized</th><th>Interest</th>
+        <th>Fees</th><th>Tax withheld</th><th>Est. tax owed</th><th>Net funded</th></tr></thead>
+      <tbody>${rows}
+        <tr class="total"><td>All brokers</td><td class="${cls(tot.net)}">${eur(tot.net)}</td><td>${tot.trades}</td><td></td>
+          <td class="${cls(tot.realized)}">${eur(tot.realized)}</td><td class="${cls(tot.income)}">${eur(tot.income)}</td>
+          <td class="neg">${eur(tot.fees)}</td><td class="${cls(tot.tax)}">${eur(tot.tax)}</td>
+          <td>${anyEst?`<span class="est ${cls(tot.est)}">${eur(tot.est)}</span>`:"—"}</td><td>${eur(tot.dep)}</td></tr>
+      </tbody></table></div>`+
+    (anyEst?`<p class="bk-note">Est. tax owed is for brokers that don't withhold tax: ${pctRate()} of each year's net gain at that broker
+      (losses later in the year reduce it, as the loss pot would). It's an estimate for setting money aside, not a tax
+      calculation — losses at one broker only offset gains at another in your annual tax return.
+      ${VIEW.estTax?"It is deducted from Net P&amp;L.":"It is <b>not</b> deducted from Net P&amp;L — tick <i>Deduct estimated tax</i> to include it."}</p>`:"");
+}
+function initViewBar(){
+  const bar=document.getElementById("viewbar");
+  const anyEst=BROKERS.some(b=>!b.withholds_tax);
+  bar.hidden = BROKERS.length<2 && !anyEst;
+  const seg=document.getElementById("broker-seg");
+  document.getElementById("broker-grp").hidden = BROKERS.length<2;
+  seg.innerHTML=[{id:"all",name:"All"},...BROKERS].map(b=>
+    `<button class="seg-btn" data-b="${b.id}">${b.name}</button>`).join("");
+  document.getElementById("tax-grp").hidden = !anyEst;
+  const chk=document.getElementById("est-tax"), rate=document.getElementById("tax-rate");
+  chk.checked=VIEW.estTax; rate.value=String(Math.round(VIEW.rate*100000)/1000);
+  document.getElementById("tax-hint").textContent =
+    "for "+BROKERS.filter(b=>!b.withholds_tax).map(b=>b.name).join(", ")+" (no tax withheld at source)";
+  seg.addEventListener("click", ev=>{ const b=ev.target.closest(".seg-btn"); if(b) setBroker(b.dataset.b); });
+  document.getElementById("brokers").addEventListener("click", ev=>{
+    const b=ev.target.closest(".bk-pick"); if(b) setBroker(VIEW.broker===b.dataset.b?"all":b.dataset.b);
+  });
+  chk.addEventListener("change", ()=>{ VIEW.estTax=chk.checked; viewChanged(); });
+  rate.addEventListener("change", ()=>{
+    const v=parseFloat(rate.value);
+    if(!(v>=0 && v<=60)){ rate.value=String(Math.round(VIEW.rate*100000)/1000); return; }
+    VIEW.rate=v/100; viewChanged();
+  });
+  markBroker();
+}
+function markBroker(){
+  document.querySelectorAll("#broker-seg .seg-btn").forEach(x=>x.classList.toggle("active", x.dataset.b===VIEW.broker));
+}
+function setBroker(id){ VIEW.broker=id; viewChanged(); }
+function viewChanged(){
+  saveView(); applyView(); buildBrokerDays(); buildCumAll(); markBroker();
+  renderStats(); refresh();
+}
+
 /* ---------- filter wiring ---------- */
 const startEl=document.getElementById("start"), endEl=document.getElementById("end");
 function clampToData(v){ return v<META.min_date?META.min_date : v>META.max_date?META.max_date : v; }
 function refresh(){
   let s=startEl.value||META.min_date, e=endEl.value||META.max_date;
   if(s>e){ [s,e]=[e,s]; startEl.value=s; endEl.value=e; }
-  renderSummary(s,e); renderEquity(s,e); renderMonthly(s,e); renderMonthlyWL(s,e); renderProfile(s,e);
+  renderSummary(s,e); renderBrokers(s,e); renderEquity(s,e); renderMonthly(s,e); renderMonthlyWL(s,e); renderProfile(s,e);
   renderWeekday(s,e); renderRolling(s,e); renderCalendar(s,e); markPreset();
 }
 function setRange(s,e){ startEl.value=clampToData(s); endEl.value=clampToData(e); CAL_VIEW=null; refresh(); }   // jump to the latest month of the new range
@@ -869,7 +983,8 @@ themeBtn.addEventListener("click", ()=>{
   let t="dark"; try{ t=localStorage.getItem("pnl-theme")||"dark"; }catch(e){}
   applyTheme(t);
   document.getElementById("brand-sub").textContent =
-    `${META.min_date} — ${META.max_date} · ${META.n_txns} transactions · ${META.n_days} active days`;
+    `${META.min_date} — ${META.max_date} · ${META.n_txns} transactions · ${META.n_days} active days`+
+    (BROKERS.length>1 ? ` · ${BROKERS.map(b=>b.name).join(" + ")}` : "");
   const note = META.missing_basis
     ? ` · ${META.missing_basis} sell(s) had no prior cost basis in the data (treated as zero cost)`
     : "";
@@ -880,12 +995,18 @@ themeBtn.addEventListener("click", ()=>{
     ? `<br><b class="neg">Unrecognised transaction type${unknown.length===1?"":"s"} excluded from all figures:</b> `+
       unknown.map(([t,n])=>`<code>${t}</code> (${n})`).join(", ")+"."
     : "";
+  const capNote = BROKERS.some(b=>b.id==="capital")
+    ? " · Capital.com: realized P&amp;L as reported on its statements, overnight funding as interest" : "";
+  const fileNotes = (META.notes||[]).length
+    ? `<br>`+META.notes.map(n=>`<span class="flat">${n.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}</span>`).join("<br>")
+    : "";
   document.getElementById("footer").innerHTML =
-    `Realized P&amp;L via FIFO lot matching per instrument (German tax method), net of trading fees · dividends &amp; interest as income · capital-gains tax withheld and tax-optimisation refunds both included · cash transfers excluded${note}.<br>`+
-    `Regenerate with <code>python build.py</code> after updating <code>data/*.csv</code>.`+
-    unknownNote;
+    `Realized P&amp;L via FIFO lot matching per instrument (German tax method), net of trading fees${capNote} · dividends &amp; interest as income · capital-gains tax withheld and tax-optimisation refunds both included · cash transfers excluded${note}.<br>`+
+    `Regenerate with <code>python build.py</code> after adding exports to <code>data/</code>.`+
+    unknownNote+fileNotes;
   startEl.min=endEl.min=META.min_date; startEl.max=endEl.max=META.max_date;
   startEl.value=META.min_date; endEl.value=META.max_date;
+  initViewBar();
   renderStats();
   refresh();
   initCollapse();

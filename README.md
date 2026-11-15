@@ -5,9 +5,10 @@ dashboard you can actually read at a glance — daily P&L on a colour-graded
 calendar, an equity curve, and a few analytics built around one question:
 *am I getting better?*
 
-It started as a personal tool for reviewing my own trading (the export format is
-[Trade Republic](https://traderepublic.com)'s), but the P&L logic is general and
-the whole thing is dependency-free.
+It started as a personal tool for reviewing my own trading. It reads
+[Trade Republic](https://traderepublic.com) exports and
+[Capital.com](https://capital.com) statements — side by side or one broker at a
+time — and each broker is one small reader module, so adding another is easy.
 
 ![P&L Ledger dashboard](docs/dashboard.png)
 
@@ -57,6 +58,18 @@ own trading habits impossible to ignore.
   shows and taxes. Profit lands on the day you *closed*, not the day you opened.
   Dividends and interest count as income; capital-gains tax is applied on its
   day; deposits and withdrawals are kept out of P&L.
+- **Several brokers, one ledger** — drop every broker's exports into `data/` and
+  the dashboard combines them. A *Broker* switch narrows every panel to one
+  broker, the *By broker* table compares them side by side for the selected
+  period (click a row to focus it), and day cells and month tooltips show the
+  split per broker.
+- **Tax owed where none was withheld** — Trade Republic withholds
+  capital-gains tax on every sale; Capital.com doesn't. For a broker that
+  doesn't, the dashboard estimates the tax owed (default 26.375% = 25% + Soli,
+  adjustable) on that broker's net gain for the year — later losses reduce it,
+  like the loss pot — and shows it with a dashed underline as an estimate, never
+  as cash. Tick *Deduct estimated tax* to see P&L after it; the choice and rate
+  are remembered and carried into PDF reports.
 - **Equity curve** with the max drawdown marked.
 - **Month-by-month bars** — net P&L per month, green above the line and red
   below, so a good or bad stretch is obvious at a glance. Hover a bar for the
@@ -83,7 +96,7 @@ PDF reports needs the tiny local server below.)
 ## Quick start
 
 ```sh
-uv run python build.py      # reads data/*.csv -> dashboard.html
+uv run python build.py      # reads data/* -> dashboard.html
 ```
 
 Then open `dashboard.html`. Out of the box it renders the bundled sample data
@@ -121,8 +134,23 @@ The columns that matter are `date`, `type`, `symbol`, `shares`, `amount`, `fee`,
 `BUY` / `SELL` / `DIVIDEND` / `INTEREST_PAYMENT` / `TAX_OPTIMIZATION` /
 `TRANSFER_INSTANT_INBOUND` / `TRANSFER_INSTANT_OUTBOUND`.
 
-Your real data stays local — `.gitignore` keeps every CSV except `demo.csv` out
-of the repo.
+### Capital.com
+
+Capital.com's CSV transaction export leaves the instrument and trade id blank,
+so use the **PDF statement** (the Client Daily Statement) instead; a day's
+statement becomes available the next day. Save it into `data/`
+under any name ending in `.pdf` and rebuild. Statements can overlap — rows are
+de-duplicated by trade and ledger id — so you can keep adding daily ones or
+pull a longer range. A Capital.com CSV export in `data/` is skipped with a note
+in the footer.
+
+Reading PDFs needs [`pdfplumber`](https://github.com/jsvine/pdfplumber), which
+`uv run` installs automatically on every platform. It's only imported when a
+Capital.com statement is present, so a Trade Republic-only setup still runs on
+the bare standard library (`python build.py`).
+
+Your real data stays local — `.gitignore` keeps everything in `data/` except
+`demo.csv` out of the repo.
 
 ## Day reports (PDF)
 
@@ -174,6 +202,11 @@ worth calling out:
   (`TAX_OPTIMIZATION`, positive), that's added back on the day it lands. Over a
   losing period the two roughly cancel — which is easy to get wrong if you only
   read the tax on dividend rows, so there's a test pinning exactly this.
+- **Brokers are kept apart.** Each broker's rows are analysed on their own, so
+  a position is never matched across brokers, then merged for the combined view.
+  Capital.com reports each closed trade's realised P&L itself; that figure is
+  used as-is (it's what the ledger cash ties out to), with overnight funding
+  counted as interest and a knock-out fee as a cost on its day.
 - **Transfers aren't P&L.** Deposits and withdrawals move your own money; they're
   tracked separately as funding, never as profit, and a pure-transfer day never
   shows up as a calendar cell.
@@ -184,7 +217,10 @@ The work is split so each piece has one job and can be read (and tested) on its
 own:
 
 ```
-loader.py      data access — find, merge, de-dupe the CSVs
+loader.py      data access — find the exports, hand each to its broker reader, merge, de-dupe
+brokers/       one reader per broker -> the common row format
+  traderepublic.py   the CSV export for tracking tools
+  capital.py         the PDF Client Daily Statement
 analysis.py    pure computation — rows -> per-day P&L + funding + meta
 build.py       orchestrator — assemble web/ + data -> dashboard.html (and report pages)
 report.py      one day -> reports/daily_report_<date>.pdf via headless Chrome
@@ -222,8 +258,9 @@ uv run ruff check .  # lint
 
 ## Notes on the design
 
-- **No framework, no runtime dependencies.** The back end is standard-library
-  Python; the front end is vanilla JS with hand-rolled SVG charts. For a tool
+- **No framework, (almost) no runtime dependencies.** The back end is
+  standard-library Python — the one exception, `pdfplumber`, is loaded only to
+  read Capital.com statements; the front end is vanilla JS with hand-rolled SVG charts. For a tool
   this size, a build toolchain and a charting library would be more moving parts
   than the problem needs — and it keeps the output genuinely portable.
 - **Self-contained output on purpose.** A single HTML file with the data baked in

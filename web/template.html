@@ -35,7 +35,21 @@
     </div>
   </section>
 
+  <section class="controls viewbar" id="viewbar" hidden>
+    <div class="grp" id="broker-grp"><label>Broker</label><span class="seg seg-lg" id="broker-seg"></span></div>
+    <div class="grp tax-grp" id="tax-grp">
+      <label class="tax-switch"><input type="checkbox" id="est-tax"><span>Deduct estimated tax</span></label>
+      <span class="rate-wrap">at <input type="number" id="tax-rate" min="0" max="60" step="0.001" aria-label="Tax rate in percent"> %</span>
+      <span class="tax-hint" id="tax-hint"></span>
+    </div>
+  </section>
+
   <section class="summary" id="summary"></section>
+
+  <section class="panel collapsible broker-panel" data-collapse="brokers" id="brokers-panel" hidden>
+    <div class="panel-head collapse-toggle"><h3>By broker · selected period</h3><span class="chevron">▾</span></div>
+    <div class="panel-body collapse-body" id="brokers"></div>
+  </section>
 
   <section class="chart-wrap collapsible" data-collapse="equity">
     <div class="chart-head collapse-toggle">
@@ -136,10 +150,12 @@
   <div class="t-row"><span>Realized (net of fees)</span><span data-k="r"></span></div>
   <div class="t-row"><span>Interest</span><span data-k="i"></span></div>
   <div class="t-row"><span>Fees (incl. above)</span><span data-k="f"></span></div>
-  <div class="t-row"><span>Tax / refund</span><span data-k="t"></span></div>
+  <div class="t-row"><span>Tax withheld / refund</span><span data-k="t"></span></div>
+  <div class="t-row t-x"><span>Est. tax owed <em data-k="xl"></em></span><span data-k="x"></span></div>
   <div class="t-row"><span>Trades</span><span data-k="n"></span></div>
   <div class="t-row t-mo"><span>Trading days</span><span data-k="days"></span></div>
   <div class="t-row t-mo"><span>Win rate · days</span><span data-k="wr"></span></div>
+  <div class="t-brokers"></div>
   <div class="t-sep"></div>
   <div class="t-row"><span>Running total · period</span><span data-k="cr"></span></div>
   <div class="t-row" id="t-cum-all"><span>Running total · all-time</span><span data-k="ca"></span></div>

@@ -66,7 +66,7 @@
       const prod=[t.prod,t.ko].filter(Boolean).map(esc).join(" · ")||"—";
       return `<tr>
         <td class="n">${t.n}</td><td>${inn}</td><td>${out}</td><td class="r">${t.o?hold(t.holdMin):"—"}</td>
-        <td><b>${esc(t.u)}</b><div class="rp-isin">${esc(t.s)}</div></td>
+        <td><b>${esc(t.u)}</b><div class="rp-isin">${esc(t.s.length>14?"…"+t.s.slice(-8):t.s)}${BROKERS.length>1&&t.b?" · "+esc(brokerName(t.b)):""}</div></td>
         <td>${t.side?`${t.side} ${arrow(t)}`:"—"}</td>
         <td class="rp-prod">${prod}</td>
         <td class="r">${qty(t.q)}</td><td class="r">${num(t.ep)}</td><td class="r">${num(t.xp,t.xp<0.1&&t.xp>0?3:2)}</td>

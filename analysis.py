@@ -37,6 +37,15 @@ TRANSFER_OUT_TYPES = {"TRANSFER_INSTANT_OUTBOUND", "TRANSFER_OUTBOUND"}  # withd
 # ("Tilgung", redemption) pays out whatever residual value is left, often cents.
 WARRANT_EXERCISE = "WARRANT_EXERCISE"
 REDEMPTION = "TILG"
+# Brokers that report each closed trade's realized P&L themselves (Capital.com)
+# arrive as POSITION_OPEN (when a position was entered — for the day view and
+# the trade count) and CLOSED_TRADE (one per full or partial close, carrying
+# ``pnl`` and the instrument detail). A stand-alone FEE (e.g. a knock-out fee)
+# is a cost charged on its day.
+POSITION_OPEN = "POSITION_OPEN"
+CLOSED_TRADE = "CLOSED_TRADE"
+FEE = "FEE"
+DEFAULT_BROKER = "tr"
 
 
 def _f(v: str) -> float:
@@ -91,6 +100,9 @@ def _instrument(row: dict) -> dict:
     name / ISIN, so plain stocks and other brokers' exports still render.
     """
     symbol = (row.get("symbol") or "").strip()
+    if row.get("underlying") is not None:      # a reader that knows the fields
+        return {"s": symbol, "u": row["underlying"] or symbol, "side": row.get("side", ""),
+                "ko": row.get("ko", ""), "prod": row.get("product", "")}
     name = " ".join((row.get("name") or "").split())
     m = _DESC.match(row.get("description") or "")
     product, underlying = (m.group(1), m.group(2)) if m else ("", "")
@@ -170,6 +182,7 @@ def compute_daily(rows: list[dict]):
     # symbol -> the trade record of a warrant closed by WARRANT_EXERCISE, awaiting
     # its TILG redemption payout
     exercised: dict[str, dict] = {}
+    opened: dict[str, str] = {}           # POSITION_OPEN: trade id -> entry timestamp
 
     for row in rows:
         typ = (row.get("type") or "").strip()
@@ -248,6 +261,28 @@ def compute_daily(rows: list[dict]):
                     date, row, instruments.get(symbol) or _instrument(row), 0.0,
                     0.0, 0.0, "", amount, 0.0, 0.0, how="ko"))
 
+        elif typ == POSITION_OPEN:
+            opened[symbol] = _ts(row)
+            daily[date]["n"] += 1
+
+        elif typ == CLOSED_TRADE:
+            # The broker's own realized P&L, taken as-is (already net of its
+            # spread; no separate order fee).
+            pnl = float(row.get("pnl") or 0.0)
+            qty = abs(shares)
+            cost = float(row.get("cost") or 0.0)
+            rec = daily[date]
+            rec["r"] += pnl
+            rec["n"] += 1
+            trades.append(_trade(
+                date, row, _instrument(row), qty, cost, cost, opened.get(symbol, ""),
+                pnl, 0.0, (cost + pnl) / qty if qty else 0.0, how=row.get("how", "")))
+
+        elif typ == FEE:
+            rec = daily[date]
+            rec["r"] += amount              # a cost on its day (amount < 0)
+            rec["f"] += amount
+
         elif typ in INCOME_TYPES:
             rec = daily[date]
             rec["i"] += amount              # dividend/interest cash
@@ -311,13 +346,92 @@ def compute_daily(rows: list[dict]):
     return daily_records, flows, meta
 
 
-def build_payload(rows: list[dict]) -> dict:
-    """Return the full ``{"days": [...], "flows": [...], "meta": {...}}`` payload
-    the dashboard consumes, wrapping :func:`compute_daily` and adding totals."""
-    daily, flows, meta = compute_daily(rows)
+def _merge_days(lists: list[list[dict]]) -> list[dict]:
+    out: dict[str, dict] = {}
+    for days in lists:
+        for d in days:
+            m = out.setdefault(d["d"], {"d": d["d"], "p": 0.0, "r": 0.0, "i": 0.0,
+                                        "f": 0.0, "t": 0.0, "n": 0})
+            for k in ("p", "r", "i", "f", "t"):
+                m[k] = round(m[k] + d[k], 2)
+            m["n"] += d["n"]
+    return [out[k] for k in sorted(out)]
+
+
+def _merge_flows(lists: list[list[dict]]) -> list[dict]:
+    out: dict[str, dict] = {}
+    for flows in lists:
+        for f in flows:
+            m = out.setdefault(f["d"], {"d": f["d"], "dep": 0.0, "wd": 0.0})
+            m["dep"] = round(m["dep"] + f["dep"], 2)
+            m["wd"] = round(m["wd"] + f["wd"], 2)
+    return [out[k] for k in sorted(out)]
+
+
+def compute_by_broker(rows: list[dict]):
+    """Run :func:`compute_daily` for each broker on its own rows and merge.
+
+    Positions never mix across brokers (the same ISIN bought at one and sold at
+    another isn't a round trip). Returns ``(days, flows, meta, per_broker)``
+    where ``days``/``flows``/``meta`` cover all brokers and ``per_broker`` maps
+    broker id -> ``{"days", "flows"}``. Every trade carries its broker as ``b``.
+    """
+    ids: list[str] = []
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        b = r.get("broker") or DEFAULT_BROKER
+        if b not in groups:
+            ids.append(b)
+        groups[b].append(r)
+    if not ids:
+        ids = [DEFAULT_BROKER]
+
+    per: dict[str, dict] = {}
+    trades: list[dict] = []
+    unknown: dict[str, int] = defaultdict(int)
+    missing = 0
+    for b in ids:
+        days, flows, meta = compute_daily(groups[b])
+        per[b] = {"days": days, "flows": flows}
+        for t in meta["trades"]:
+            t["b"] = b
+        trades += meta["trades"]
+        missing += meta["missing_basis"]
+        for k, v in meta["unknown_types"].items():
+            unknown[k] += v
+
+    days = _merge_days([per[b]["days"] for b in ids])
+    flows = _merge_flows([per[b]["flows"] for b in ids])
+    trades.sort(key=lambda t: (t["d"], t["c"]))
+    all_dates = sorted({d["d"] for d in days} | {f["d"] for f in flows})
+    meta = {
+        "missing_basis": missing,
+        "unknown_types": dict(sorted(unknown.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "min_date": all_dates[0] if all_dates else None,
+        "max_date": all_dates[-1] if all_dates else None,
+        "n_days": len(days),
+        "trades": trades,
+    }
+    return days, flows, meta, per
+
+
+def build_payload(rows: list[dict], broker_info=None) -> dict:
+    """Return the full payload the dashboard consumes::
+
+        {"days": [...], "flows": [...], "meta": {...},
+         "brokers": {id: {"days": [...], "flows": [...]}}}
+
+    ``days``/``flows`` cover every broker; ``brokers`` holds the same per broker,
+    so the dashboard can switch between them. ``broker_info(id)`` supplies each
+    broker's display metadata (``{"id", "name", "withholds_tax"}``), listed in
+    ``meta["brokers"]``.
+    """
+    daily, flows, meta, per = compute_by_broker(rows)
+    info = broker_info or (lambda b: {"id": b, "name": b, "withholds_tax": True})
+    meta["brokers"] = [info(b) for b in per]
     meta["n_txns"] = len(rows)
     meta["total_pnl"] = round(sum(d["p"] for d in daily), 2)
     meta["deposits"] = round(sum(f["dep"] for f in flows), 2)
     meta["withdrawals"] = round(sum(f["wd"] for f in flows), 2)
     meta["net_deposited"] = round(meta["deposits"] + meta["withdrawals"], 2)
-    return {"days": daily, "flows": flows, "meta": meta}
+    return {"days": daily, "flows": flows, "meta": meta, "brokers": per}
