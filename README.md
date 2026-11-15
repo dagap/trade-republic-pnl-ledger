@@ -1,6 +1,6 @@
 # P&L Ledger
 
-A calendar-style trading journal that turns a broker's transaction export into a
+A calendar-style trading journal that turns your brokers' exports into a
 dashboard you can actually read at a glance — daily P&L on a colour-graded
 calendar, an equity curve, and a few analytics built around one question:
 *am I getting better?*
@@ -38,8 +38,9 @@ own trading habits impossible to ignore.
 - **Day view** — click any trading day for a trade-by-trade report: headline
   KPIs (net, win rate, profit factor, best/worst trade, average hold, capital
   deployed), an intraday equity curve, a timeline of every position from entry to
-  exit, net P&L by underlying and by long/short, and the full trade table.
-  Positions carried in from an earlier session are flagged as overnight, and
+  exit, net P&L by underlying and by long/short, and the full trade table —
+  with a *Broker* column when your data spans more than one broker, so you can
+  see at a glance where each trade was placed. Positions carried in from an earlier session are flagged as overnight, and
   knock-outs are marked. Step between days with ← / →, close with Esc.
 
   ![Day view](docs/day-view.png)
@@ -228,13 +229,14 @@ serve.py       local server: the dashboard + the "Generate report" endpoint
 web/
   template.html   HTML shell with placeholders
   styles.css      all styling
-  core.js         the baked-in data + date / money helpers, shared by every page
+  core.js         the baked-in data, the broker / est.-tax view + date / money helpers,
+                  shared by every page
   app.js          dashboard behaviour (vanilla JS, SVG charts)
   day-core.js     one day's numbers and section renderers (day view + report)
   day.js          the day view opened by clicking a calendar day
   report.html     printable report shell (with report.css / report.js)
 data/demo.csv  bundled sample data
-tests/         pytest suite for the analysis and loader
+tests/         pytest suite for the analysis, loader and broker readers
 ```
 
 The build is a straight line: `load_transactions → build_payload → render`.
@@ -243,16 +245,32 @@ result is one portable file. `loader` and `analysis` are side-effect free, which
 is what makes them easy to test:
 
 ```python
-import loader, analysis
-rows = loader.load_transactions("data")
-payload = analysis.build_payload(rows)   # {"days": [...], "flows": [...], "meta": {...}}
-payload["meta"]["trades"]                # one record per closed trade, used by the day view
+import brokers, loader, analysis
+rows = loader.load_transactions("data")              # every row tagged with its broker
+payload = analysis.build_payload(rows, brokers.info)  # {"days", "flows", "meta", "brokers"}
+payload["meta"]["trades"]          # one record per closed trade (with its broker), for the day view
+payload["brokers"]["capital"]      # the same days / flows for one broker
 ```
+
+The estimated tax for brokers that don't withhold isn't in the payload: it
+depends on the rate you pick, so `core.js` works it out in the browser from each
+broker's day records.
+
+### Adding a broker
+
+Add a module to `brokers/` and list it in `READERS` in `brokers/__init__.py`. It
+needs an `ID`, a display `NAME`, `WITHHOLDS_TAX`, a `detect(path, head)` that
+recognises the broker's files and a `read(path)` that returns rows in the
+common format — Trade Republic's CSV columns (`datetime`, `date`, `type`,
+`symbol`, `shares`, `amount`, `fee`, `tax`, `transaction_id`, …). If the broker
+reports realized P&L per trade itself, emit `POSITION_OPEN` / `CLOSED_TRADE` rows
+the way `capital.py` does instead of buys and sells. Nothing else changes: the
+broker switch, the by-broker table and the tax estimate pick it up on their own.
 
 ## Development
 
 ```sh
-uv run pytest        # tests for the P&L math + loader precedence/de-dup
+uv run pytest        # tests for the P&L math, loader precedence/de-dup and broker readers
 uv run ruff check .  # lint
 ```
 

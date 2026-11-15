@@ -273,6 +273,7 @@ const DV=(()=>{
   }
 
   function tableHTML(ts){
+    const multi=BROKERS.length>1;   // a Broker column only when the data spans several
     const rows=[...ts].sort((a,b)=>a.n-b.n).map(t=>{
       const inn=!t.o?`<span class="flat">—</span>`
         : t.carried?`${shortDate(t.o)} ${hm(ms(t.o))} <span class="dv-pill">overnight</span>`:hm(ms(t.o));
@@ -280,7 +281,7 @@ const DV=(()=>{
       return `<tr>
         <td class="flat">${t.n}</td><td>${inn}</td><td>${out}</td>
         <td class="r">${t.o?hold(t.holdMin):"—"}</td>
-        <td>${esc(t.u)}${BROKERS.length>1&&t.b?`<br><span class="flat">${esc(brokerName(t.b))}</span>`:""}</td>
+        <td>${esc(t.u)}</td>${multi?`<td>${esc(t.b?brokerName(t.b):"—")}</td>`:""}
         <td>${t.side?`<span class="dv-pill">${t.side} ${arrow(t)}</span>`:"—"}</td>
         <td>${esc(t.prod)||"—"}</td><td>${esc(t.ko)||"—"}</td>
         <td class="r">${qty(t.q)}</td><td class="r">${num(t.ep)}</td><td class="r">${num(t.xp,t.xp<0.1&&t.xp>0?3:2)}</td>
@@ -291,7 +292,7 @@ const DV=(()=>{
       </tr>`;
     }).join("");
     return `<div class="dv-tw"><table class="dv-table">
-      <thead><tr><th>#</th><th>In</th><th>Out</th><th class="r">Hold</th><th>Underlying</th><th>Side</th><th>Product</th>
+      <thead><tr><th>#</th><th>In</th><th>Out</th><th class="r">Hold</th><th>Underlying</th>${multi?"<th>Broker</th>":""}<th>Side</th><th>Product</th>
         <th>KO / strike</th><th class="r">Qty</th><th class="r">Entry</th><th class="r">Exit</th><th class="r">Cost</th>
         <th class="r">Net</th><th class="r">Return</th><th>ISIN / ID</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
