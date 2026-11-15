@@ -146,6 +146,12 @@ de-duplicated by trade and ledger id — so you can keep adding daily ones or
 pull a longer range. A Capital.com CSV export in `data/` is skipped with a note
 in the footer.
 
+Any number of statements can sit in `data/` together. Their rows are merged and
+sorted by time, whatever the files are called, and a position opened in one
+statement and closed in a later one is matched by its trade id. If the
+statement with the opening isn't there, the close and its P&L still count — the
+trade just has no entry time in the day view.
+
 Reading PDFs needs [`pdfplumber`](https://github.com/jsvine/pdfplumber), which
 `uv run` installs automatically on every platform. It's only imported when a
 Capital.com statement is present, so a Trade Republic-only setup still runs on
